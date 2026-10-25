@@ -102,6 +102,8 @@ def summary(hits):
 
 
 IMESSAGE_TO = None  # phone number or Apple ID email, set by --imessage
+REMINDER = False  # set by --reminder
+REMINDER_DELAY = 30  # seconds; time for iCloud to sync the reminder before its alarm
 
 SEND_IMESSAGE = """
 on run argv
@@ -131,16 +133,33 @@ def send_ntfy(topic, title, message, links):
         pass
 
 
+ADD_REMINDER = """
+on run argv
+    tell application "Reminders"
+        set alarm to (current date) + (item 3 of argv as integer)
+        make new reminder with properties {name:(item 1 of argv), body:(item 2 of argv), remind me date:alarm}
+    end tell
+end run
+"""
+
+
 def send_imessage(to, text):
     """Send an iMessage through the Messages app (macOS only)."""
     subprocess.run(["osascript", "-e", SEND_IMESSAGE, text, to],
                    check=True, capture_output=True, timeout=30)
 
 
+def add_reminder(title, text):
+    """Add a Reminders item that alarms shortly, so iCloud rings it on iPhone and Watch (macOS only)."""
+    subprocess.run(["osascript", "-e", ADD_REMINDER, title, text, str(REMINDER_DELAY)],
+                   check=True, capture_output=True, timeout=30)
+
+
 def notify(topic, title, message, links):
-    """Alert by ntfy, plus iMessage if --imessage was given; links is a list of (label, url),
+    """Alert by ntfy, plus iMessage / Reminders if asked for; links is a list of (label, url),
     the first is the tap target. Returns True if any channel got through."""
     sent = False
+    body = message if links[0][1] in message else f"{message}\n{links[0][1]}"
     try:
         send_ntfy(topic, title, message, links)
         sent = True
@@ -148,12 +167,18 @@ def notify(topic, title, message, links):
         log(f"ntfy alert failed: {e}")
     if IMESSAGE_TO:
         try:
-            link = "" if links[0][1] in message else f"\n{links[0][1]}"
-            send_imessage(IMESSAGE_TO, f"{title}\n{message}{link}")
+            send_imessage(IMESSAGE_TO, f"{title}\n{body}")
             sent = True
         except (OSError, subprocess.SubprocessError) as e:
             detail = getattr(e, "stderr", b"") or b""
             log(f"iMessage alert failed: {e} {detail.decode(errors='replace').strip()}")
+    if REMINDER:
+        try:
+            add_reminder(title, body)
+            sent = True
+        except (OSError, subprocess.SubprocessError) as e:
+            detail = getattr(e, "stderr", b"") or b""
+            log(f"Reminders alert failed: {e} {detail.decode(errors='replace').strip()}")
     return sent
 
 
@@ -207,9 +232,12 @@ def main():
                    help="checkout the phone already set up in your bag (watch just its --part)")
     p.add_argument("--imessage", metavar="PHONE_OR_EMAIL",
                    help="also send each alert as an iMessage from this Mac's Messages app")
+    p.add_argument("--reminder", action="store_true",
+                   help="also add each alert to Reminders with an alarm (rings on iPhone and Watch via iCloud)")
     args = p.parse_args()
-    global IMESSAGE_TO
+    global IMESSAGE_TO, REMINDER
     IMESSAGE_TO = args.imessage
+    REMINDER = args.reminder
     parts = args.part or list(LINKS)
     stores = args.store or list(STORES)
     unknown = [part for part in parts if part not in LINKS]
