@@ -15,6 +15,10 @@ python3 pickup_watch.py --topic <your-ntfy-topic> --test-notify
 python3 pickup_watch.py --topic <your-ntfy-topic>
 ```
 
+To also get each alert as an iMessage (sent from this Mac's Messages app to
+your phone number or Apple ID email), add `--imessage <phone-or-email>`. The
+first time, macOS asks to let Terminal control Messages; allow it.
+
 ### Auto-checkout to the Review page
 
 With `--checkout`, on stock it opens Chrome and, signed in to your Apple

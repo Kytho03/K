@@ -15,6 +15,7 @@ import json
 import os
 import random
 import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -100,8 +101,19 @@ def summary(hits):
     return " | ".join(f"{name}: {', '.join(v)}" for name, v in by_store.items())
 
 
-def notify(topic, title, message, links):
-    """Send one push; links is a list of (label, url), the first is the tap target."""
+IMESSAGE_TO = None  # phone number or Apple ID email, set by --imessage
+
+SEND_IMESSAGE = """
+on run argv
+    tell application "Messages"
+        set svc to 1st account whose service type = iMessage
+        send (item 1 of argv) to participant (item 2 of argv) of svc
+    end tell
+end run
+"""
+
+
+def send_ntfy(topic, title, message, links):
     actions = "; ".join(f"view, {label}, {url}" for label, url in links[:3])
     req = urllib.request.Request(
         f"https://ntfy.sh/{urllib.parse.quote(topic)}",
@@ -119,6 +131,32 @@ def notify(topic, title, message, links):
         pass
 
 
+def send_imessage(to, text):
+    """Send an iMessage through the Messages app (macOS only)."""
+    subprocess.run(["osascript", "-e", SEND_IMESSAGE, text, to],
+                   check=True, capture_output=True, timeout=30)
+
+
+def notify(topic, title, message, links):
+    """Alert by ntfy, plus iMessage if --imessage was given; links is a list of (label, url),
+    the first is the tap target. Returns True if any channel got through."""
+    sent = False
+    try:
+        send_ntfy(topic, title, message, links)
+        sent = True
+    except (urllib.error.URLError, ValueError) as e:
+        log(f"ntfy alert failed: {e}")
+    if IMESSAGE_TO:
+        try:
+            link = "" if links[0][1] in message else f"\n{links[0][1]}"
+            send_imessage(IMESSAGE_TO, f"{title}\n{message}{link}")
+            sent = True
+        except (OSError, subprocess.SubprocessError) as e:
+            detail = getattr(e, "stderr", b"") or b""
+            log(f"iMessage alert failed: {e} {detail.decode(errors='replace').strip()}")
+    return sent
+
+
 def run_checkout(args, hit):
     """Take one in-stock part to the Review page in Chrome, then send a single alert."""
     link = link_for(hit.part)
@@ -131,11 +169,8 @@ def run_checkout(args, hit):
         log("alert sent")
 
     def on_help(reason):
-        try:
-            notify(args.topic, f"{hit.title} at {where}: checkout needs you", reason,
-                   [("Open buy page", link)])
-        except (urllib.error.URLError, ValueError) as e:
-            log(f"couldn't send alert: {e}")
+        notify(args.topic, f"{hit.title} at {where}: checkout needs you", reason,
+               [("Open buy page", link)])
 
     log(f"{hit.title} in stock at {where}; starting auto-checkout")
     try:
@@ -170,7 +205,11 @@ def main():
     p.add_argument("--no-trade-in", action="store_true", help="checkout without the iPhone 17 Pro Max trade-in")
     p.add_argument("--from-bag", action="store_true",
                    help="checkout the phone already set up in your bag (watch just its --part)")
+    p.add_argument("--imessage", metavar="PHONE_OR_EMAIL",
+                   help="also send each alert as an iMessage from this Mac's Messages app")
     args = p.parse_args()
+    global IMESSAGE_TO
+    IMESSAGE_TO = args.imessage
     parts = args.part or list(LINKS)
     stores = args.store or list(STORES)
     unknown = [part for part in parts if part not in LINKS]
@@ -178,9 +217,9 @@ def main():
         p.error(f"unknown part {', '.join(unknown)}; use one of {', '.join(LINKS)}")
 
     if args.test_notify:
-        notify(args.topic, "Test: pickup watcher", "Notifications are working.",
-               [("Open", link_for(parts[0]))])
-        log("test notification sent")
+        ok = notify(args.topic, "Test: pickup watcher", "Notifications are working.",
+                    [("Open", link_for(parts[0]))])
+        log("test alert sent" if ok else "test alert failed on every channel")
         return
 
     log(f"watching {', '.join(parts)} at stores {', '.join(stores)}; checking every "
@@ -200,15 +239,17 @@ def main():
                 for h in in_stock:
                     links.setdefault(h.part, (f"Reserve {h.title}", link_for(h.part)))
                 where = ", ".join(dict.fromkeys(f"Apple {h.store_name}" for h in in_stock))
-                notify(
+                alerted = notify(
                     args.topic,
                     f"In stock for pickup at {where}!",
                     "\n".join(f"{h.title} at Apple {h.store_name}: {h.quote}" for h in in_stock)
                     + "\n" + "\n".join(url for _, url in links.values()),
                     list(links.values()),
                 )
-                log("alert sent; exiting")
-                return
+                if alerted:
+                    log("alert sent; exiting")
+                    return
+                log("alert failed; trying again next check")
         except (urllib.error.URLError, RuntimeError, KeyError, ValueError) as e:
             failures += 1
             log(f"check failed ({failures} in a row): {e}")
