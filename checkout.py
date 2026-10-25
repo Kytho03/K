@@ -19,7 +19,7 @@ this uses a dedicated profile directory. Sign in to apple.com in it once:
 
     python3 checkout.py --setup
 
-Then try a dry run whenever you like (it stops at Review; just close the window):
+Then try a dry run whenever you like (it stops at Review; quit Chrome with Cmd+Q):
 
     python3 checkout.py --part MK1F4LL/A
     python3 checkout.py --part MK1H4LL/A --store "Bethesda Row" --zip 20814
@@ -28,14 +28,23 @@ Then try a dry run whenever you like (it stops at Review; just close the window)
 import argparse
 import os
 import re
+import socket
+import subprocess
 import sys
 import time
+import urllib.request
 
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
 
 DEFAULT_PROFILE = os.path.expanduser("~/.pickup-watch-chrome")
+CHROME_PATHS = [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    os.path.expanduser("~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+    "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    "/usr/bin/google-chrome",
+]
 DEFAULT_ZIP = "21044"  # Columbia, MD
 DEFAULT_STORE = "Columbia"
 DEFAULT_STORE_RE = r"\bColumbia\b"
@@ -383,10 +392,42 @@ def step_name(page):
     return f"the {m.group(1)} step" if m else "the current page"
 
 
+def start_chrome(profile_dir, *args):
+    """Start an ordinary Chrome on profile_dir (Apple's sign-in hangs in automation-launched Chrome)."""
+    candidates = [os.environ.get("CHECKOUT_CHROME_PATH", ""), *CHROME_PATHS]
+    path = next((c for c in candidates if c and os.path.exists(c)), None)
+    if path is None:
+        raise RuntimeError("couldn't find Google Chrome; set CHECKOUT_CHROME_PATH to it")
+    cmd = [path, f"--user-data-dir={profile_dir}", "--no-first-run", "--no-default-browser-check",
+           *os.environ.get("CHECKOUT_CHROME_ARGS", "").split(), *args]
+    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def open_browser(p, profile_dir):
-    return p.chromium.launch_persistent_context(
-        profile_dir, channel=os.environ.get("CHECKOUT_CHROME_CHANNEL", "chrome"),
-        headless=False, viewport=None, args=["--start-maximized"])
+    """Start Chrome with a local debugging port and attach to it; returns (context, wait_closed)."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    proc = start_chrome(profile_dir, f"--remote-debugging-port={port}", "about:blank")
+    endpoint = f"http://127.0.0.1:{port}"
+    no_proxy = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    deadline = time.monotonic() + 30
+    while True:
+        try:
+            no_proxy.open(f"{endpoint}/json/version", timeout=2).close()
+            break
+        except OSError:
+            if proc.poll() is not None or time.monotonic() > deadline:
+                raise RuntimeError(f"Chrome didn't start; quit any Chrome window using {profile_dir} "
+                                   "(Cmd+Q) and try again")
+            time.sleep(0.5)
+    browser = p.chromium.connect_over_cdp(endpoint)
+
+    def wait_closed():
+        while proc.poll() is None:
+            time.sleep(1)
+
+    return browser.contexts[0], wait_closed
 
 
 def run(part, profile_dir=DEFAULT_PROFILE, zip_code=DEFAULT_ZIP, store_re=DEFAULT_STORE_RE,
@@ -396,7 +437,7 @@ def run(part, profile_dir=DEFAULT_PROFILE, zip_code=DEFAULT_ZIP, store_re=DEFAUL
     on_help(reason) is called each time a step needs the user in the Chrome window.
     """
     with sync_playwright() as p:
-        ctx = open_browser(p, profile_dir)
+        ctx, wait_closed = open_browser(p, profile_dir)
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         page.set_default_timeout(STEP_TIMEOUT)
         ask = make_ask(page, on_help)
@@ -414,22 +455,15 @@ def run(part, profile_dir=DEFAULT_PROFILE, zip_code=DEFAULT_ZIP, store_re=DEFAUL
         log(message)
         if on_result:
             on_result(ok, message, page.url)
-        log("leaving the browser open; close it when you're done")
-        try:
-            ctx.wait_for_event("close", timeout=0)
-        except PlaywrightError:
-            pass
+        log("leaving Chrome open; quit it (Cmd+Q) when you're done")
+        wait_closed()
         return ok
 
 
 def setup(profile_dir):
-    with sync_playwright() as p:
-        ctx = open_browser(p, profile_dir)
-        page = ctx.pages[0] if ctx.pages else ctx.new_page()
-        page.goto("https://www.apple.com/shop/bag")
-        log("sign in to your Apple Account in this window (Sign In in the bag menu; tick "
-            "'Keep me signed in' if offered), then quit it with Cmd+Q")
-        ctx.wait_for_event("close", timeout=0)
+    log("sign in to your Apple Account in the Chrome window (Sign In on the bag page; tick "
+        "'Keep me signed in' if offered), then quit Chrome with Cmd+Q")
+    start_chrome(profile_dir, "https://www.apple.com/shop/bag").wait()
 
 
 def main():

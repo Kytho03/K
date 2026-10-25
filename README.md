@@ -8,9 +8,11 @@ Night Sky 256GB (`MK1F4LL/A`) and 512GB (`MK1H4LL/A`) at Apple Columbia
 jitter, and sends one ntfy.sh push when either model is available at any of
 them. Use `--store` (repeatable) to watch a different set.
 
+Check the push arrives, then watch (alerts only):
+
 ```sh
-python3 pickup_watch.py --topic <your-ntfy-topic> --test-notify   # check the push arrives
-python3 pickup_watch.py --topic <your-ntfy-topic>                 # alert only
+python3 pickup_watch.py --topic <your-ntfy-topic> --test-notify
+python3 pickup_watch.py --topic <your-ntfy-topic>
 ```
 
 ### Auto-checkout to the Review page
@@ -27,12 +29,11 @@ needs input) send an ntfy alert saying what to do in Chrome; it waits up to 15
 minutes for you, then carries on. When it reaches Review it sends a final alert
 and leaves the window open for you to place the order.
 
-```sh
-pip install playwright        # uses your installed Google Chrome
-python3 checkout.py --setup   # one time: sign in to apple.com, then quit Chrome
-python3 checkout.py --part MK1F4LL/A   # optional dry run; close the window when done
-python3 pickup_watch.py --topic <your-ntfy-topic> --checkout
-```
+1. Install Playwright (it drives your installed Google Chrome): `pip install playwright`
+2. One time, sign in to apple.com in the checkout profile, then quit Chrome (Cmd+Q):
+   `python3 checkout.py --setup`
+3. Optional dry run; quit Chrome when it stops: `python3 checkout.py --part MK1F4LL/A`
+4. Watch: `python3 pickup_watch.py --topic <your-ntfy-topic> --checkout`
 
 If T-Mobile's number and PIN aren't already filled in for you, the script fills
 them from `TMOBILE_NUMBER` and `TMOBILE_PIN`. Set them in the Terminal session
@@ -45,4 +46,5 @@ export TMOBILE_NUMBER TMOBILE_PIN
 
 Use `--carrier unlocked` to pay in full instead, and `--no-trade-in` to skip the
 trade-in. Chrome blocks automation of your everyday profile, so checkout uses
-its own profile at `~/.pickup-watch-chrome`.
+its own profile at `~/.pickup-watch-chrome`, started as a normal Chrome window
+(Apple's sign-in hangs in a browser launched for automation).
