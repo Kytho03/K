@@ -127,11 +127,19 @@ def run_checkout(args, hit):
         notify(args.topic, heading, message, [("Open buy page", link)])
         log("alert sent")
 
+    def on_help(reason):
+        try:
+            notify(args.topic, f"{hit.title} at {where}: checkout needs you", reason,
+                   [("Open buy page", link)])
+        except (urllib.error.URLError, ValueError) as e:
+            log(f"couldn't send alert: {e}")
+
     log(f"{hit.title} in stock at {where}; starting auto-checkout")
     try:
         import checkout  # needs playwright; only loaded when --checkout is used
         checkout.run(hit.part, args.profile_dir, hit.zip, rf"\b{re.escape(hit.store_name)}\b",
-                     on_result=on_result)
+                     on_result=on_result, on_help=on_help,
+                     carrier=args.carrier, trade_in=not args.no_trade_in)
     except Exception as e:  # checkout never got far enough to report; still alert
         log(f"auto-checkout failed to start: {e}")
         notify(args.topic, f"{hit.title} in stock at {where}!",
@@ -154,6 +162,9 @@ def main():
     p.add_argument("--profile-dir", default=os.path.expanduser("~/.pickup-watch-chrome"),
                    help="Chrome profile used by --checkout")
     p.add_argument("--zip", default=DEFAULT_ZIP, help="ZIP to search stores near")
+    p.add_argument("--carrier", choices=["tmobile", "unlocked"], default="tmobile",
+                   help="checkout plan: T-Mobile Equipment Installment Plan, or pay in full unlocked")
+    p.add_argument("--no-trade-in", action="store_true", help="checkout without the iPhone 17 Pro Max trade-in")
     args = p.parse_args()
     parts = args.part or list(LINKS)
     stores = args.store or list(STORES)
