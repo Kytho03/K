@@ -19,10 +19,10 @@ To also get each alert as an iMessage (sent from this Mac's Messages app to
 your phone number or Apple ID email), add `--imessage <phone-or-email>`. The
 first time, macOS asks to let Terminal control Messages; allow it.
 
-Add `--reminder` to also create a Reminders item whose alarm goes off 30
-seconds later; iCloud syncs it to your iPhone and Apple Watch, so it rings
-there even though it comes from your own account. macOS asks once to let
-Terminal control Reminders.
+Add `--status` to post every check result (or failed check) to the ntfy topic
+`<your-ntfy-topic>-status` at the lowest priority, so it arrives silently.
+Subscribe to that topic in the ntfy app for a live feed of what the watcher
+sees; real stock alerts still go to your main topic at urgent priority.
 
 ### Auto-checkout to the Review page
 

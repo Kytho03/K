@@ -102,8 +102,6 @@ def summary(hits):
 
 
 IMESSAGE_TO = None  # phone number or Apple ID email, set by --imessage
-REMINDER = False  # set by --reminder
-REMINDER_DELAY = 30  # seconds; time for iCloud to sync the reminder before its alarm
 
 SEND_IMESSAGE = """
 on run argv
@@ -115,32 +113,23 @@ end run
 """
 
 
-def send_ntfy(topic, title, message, links):
-    actions = "; ".join(f"view, {label}, {url}" for label, url in links[:3])
-    req = urllib.request.Request(
-        f"https://ntfy.sh/{urllib.parse.quote(topic)}",
-        data=message.encode(),
-        headers={
-            "Title": title,
-            "Priority": "urgent",
-            "Tags": "iphone,rotating_light",
-            "Click": links[0][1],
-            "Actions": actions,
-        },
-        method="POST",
-    )
+def send_ntfy(topic, title, message, links=(), priority="urgent", tags="iphone,rotating_light"):
+    headers = {"Title": title, "Priority": priority, "Tags": tags}
+    if links:
+        headers["Click"] = links[0][1]
+        headers["Actions"] = "; ".join(f"view, {label}, {url}" for label, url in links[:3])
+    req = urllib.request.Request(f"https://ntfy.sh/{urllib.parse.quote(topic)}",
+                                 data=message.encode(), headers=headers, method="POST")
     with urllib.request.urlopen(req, timeout=20):
         pass
 
 
-ADD_REMINDER = """
-on run argv
-    tell application "Reminders"
-        set alarm to (current date) + (item 3 of argv as integer)
-        make new reminder with properties {name:(item 1 of argv), body:(item 2 of argv), remind me date:alarm}
-    end tell
-end run
-"""
+def post_status(topic, text):
+    """Post a check result to <topic>-status at the lowest priority (no sound or buzz)."""
+    try:
+        send_ntfy(f"{topic}-status", "Pickup watcher", text, priority="min", tags="eyes")
+    except (urllib.error.URLError, ValueError) as e:
+        log(f"status update failed: {e}")
 
 
 def send_imessage(to, text):
@@ -149,14 +138,8 @@ def send_imessage(to, text):
                    check=True, capture_output=True, timeout=30)
 
 
-def add_reminder(title, text):
-    """Add a Reminders item that alarms shortly, so iCloud rings it on iPhone and Watch (macOS only)."""
-    subprocess.run(["osascript", "-e", ADD_REMINDER, title, text, str(REMINDER_DELAY)],
-                   check=True, capture_output=True, timeout=30)
-
-
 def notify(topic, title, message, links):
-    """Alert by ntfy, plus iMessage / Reminders if asked for; links is a list of (label, url),
+    """Alert by ntfy, plus iMessage if --imessage was given; links is a list of (label, url),
     the first is the tap target. Returns True if any channel got through."""
     sent = False
     body = message if links[0][1] in message else f"{message}\n{links[0][1]}"
@@ -172,13 +155,6 @@ def notify(topic, title, message, links):
         except (OSError, subprocess.SubprocessError) as e:
             detail = getattr(e, "stderr", b"") or b""
             log(f"iMessage alert failed: {e} {detail.decode(errors='replace').strip()}")
-    if REMINDER:
-        try:
-            add_reminder(title, body)
-            sent = True
-        except (OSError, subprocess.SubprocessError) as e:
-            detail = getattr(e, "stderr", b"") or b""
-            log(f"Reminders alert failed: {e} {detail.decode(errors='replace').strip()}")
     return sent
 
 
@@ -232,12 +208,11 @@ def main():
                    help="checkout the phone already set up in your bag (watch just its --part)")
     p.add_argument("--imessage", metavar="PHONE_OR_EMAIL",
                    help="also send each alert as an iMessage from this Mac's Messages app")
-    p.add_argument("--reminder", action="store_true",
-                   help="also add each alert to Reminders with an alarm (rings on iPhone and Watch via iCloud)")
+    p.add_argument("--status", action="store_true",
+                   help="post every check result, silently, to the ntfy topic <topic>-status")
     args = p.parse_args()
-    global IMESSAGE_TO, REMINDER
+    global IMESSAGE_TO
     IMESSAGE_TO = args.imessage
-    REMINDER = args.reminder
     parts = args.part or list(LINKS)
     stores = args.store or list(STORES)
     unknown = [part for part in parts if part not in LINKS]
@@ -258,6 +233,8 @@ def main():
             hits = check(parts, stores, args.zip)
             failures = 0
             log(summary(hits))
+            if args.status:
+                post_status(args.topic, summary(hits))
             in_stock = [h for h in hits if h.available]
             if in_stock and args.checkout:
                 run_checkout(args, in_stock[0])
@@ -281,6 +258,8 @@ def main():
         except (urllib.error.URLError, RuntimeError, KeyError, ValueError) as e:
             failures += 1
             log(f"check failed ({failures} in a row): {e}")
+            if args.status:
+                post_status(args.topic, f"check failed ({failures} in a row): {e}")
 
         # Back off on repeated errors so we don't hammer Apple if they block us.
         base = args.interval * min(2 ** max(failures - 1, 0), 8) if failures else args.interval
