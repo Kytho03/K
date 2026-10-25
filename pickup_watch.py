@@ -269,8 +269,8 @@ def main():
             if args.status:
                 post_status(args.topic, f"check failed ({failures} in a row): {e}")
 
-        # Back off on repeated errors so we don't hammer Apple if they block us.
-        base = args.interval * min(2 ** max(failures - 1, 0), 8) if failures else args.interval
+        # Back off on repeated errors (up to 10 minutes) so an Apple block can clear.
+        base = min(args.interval * 2 ** (failures - 1), 600) if failures else args.interval
         time.sleep(max(10, base + random.uniform(-args.jitter, args.jitter)))
 
 
