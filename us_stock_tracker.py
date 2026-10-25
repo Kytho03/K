@@ -30,8 +30,14 @@ PARTS = {
     "MK1R4LL/A": "2TB Night Sky",
 }
 
-# Every US Apple Store is among the 12 stores Apple lists nearest to one of these.
-ZIPS = []
+# Every US Apple Store (269 in Oct 2026) is among the 12 stores Apple lists nearest to one of
+# these; picked from a survey of ~160 ZIPs across the country.
+ZIPS = [
+    "04101", "06103", "11201", "11743", "12207", "13202", "14604", "19103", "22030", "23510",
+    "29401", "33401", "34236", "37919", "39201", "47715", "48226", "50309", "60601", "62701",
+    "74103", "78701", "82001", "83702", "84101", "85373", "87102", "91361", "92101", "92614",
+    "93401", "95113", "95814", "96001", "96813", "98402", "99501",
+]
 
 
 def in_stock_now(hits):

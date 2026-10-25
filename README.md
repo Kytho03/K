@@ -36,6 +36,18 @@ alerts again whenever stock newly appears. `--near <ZIP>` (repeatable) also
 tracks every store Apple lists near that ZIP, in the changes log only; each one
 adds a request per check.
 
+### Nationwide changes feed
+
+`us_stock_tracker.py` sweeps all 269 US Apple Stores (37 ZIP searches, one
+request every ~8-12 seconds, so a full sweep takes ~7 minutes) for every iPhone
+Duo size and colour, and logs each in-stock / sold-out change to the ntfy topic
+`<your-ntfy-topic>-us` (no push) and `us_stock_changes.csv`. The first sweep
+posts one summary of everywhere with stock. It never sends alerts.
+
+```sh
+python3 us_stock_tracker.py --topic <your-ntfy-topic>
+```
+
 ### Auto-checkout to the Review page
 
 With `--checkout`, on stock it opens Chrome and, signed in to your Apple
