@@ -3,10 +3,10 @@
 ## Apple pickup watcher
 
 `pickup_watch.py` polls Apple's in-store pickup availability for the iPhone Duo
-Night Sky 256GB (`MK1F4LL/A`) and 512GB (`MK1H4LL/A`) at Apple Columbia
-(`R168`), Annapolis (`R142`), Bethesda Row (`R112`) and Montgomery Mall
-(`R084`) every ~2 minutes with jitter, and sends one ntfy.sh push when either model is available at any of
-them. Use `--store` (repeatable) to watch a different set.
+Night Sky 256GB (`MK1F4LL/A`) and 512GB (`MK1H4LL/A`) at all 12 Apple Stores in
+the DC/Maryland/Virginia area (see `STORES` in `pickup_watch.py`) every ~2
+minutes with jitter, and sends one ntfy.sh push when either model is available
+at any of them. Use `--store` (repeatable) to watch a different set.
 
 Check the push arrives, then watch (alerts only):
 
@@ -27,8 +27,8 @@ watcher sees; only real stock alerts, on your main topic, notify your phone.
 ### Auto-checkout to the Review page
 
 With `--checkout`, on stock it opens Chrome and, signed in to your Apple
-Account, configures the in-stock phone (preferring Columbia, then Annapolis,
-then Bethesda Row, then Montgomery Mall, and 256GB over 512GB) with your saved iPhone 17 Pro Max
+Account, configures the in-stock phone (preferring stores in the order of
+`STORES`, Columbia first, and 256GB over 512GB) with your saved iPhone 17 Pro Max
 trade-in and the T-Mobile Equipment Installment Plan, adds it to the bag, picks
 in-store pickup at that store, clicks through checkout, and stops on the Review
 page. It never places the order.

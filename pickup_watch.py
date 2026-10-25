@@ -28,12 +28,21 @@ LINKS = {
     "MK1F4LL/A": "https://www.apple.com/shop/buy-iphone/iphone-duo/7.6-inch-display-256gb-night-sky",
     "MK1H4LL/A": "https://www.apple.com/shop/buy-iphone/iphone-duo/7.6-inch-display-512gb-night-sky",
 }
-# Stores watched by default, in the order auto-checkout prefers them.
+# Stores watched by default (every DC/Maryland/Virginia store), in the order auto-checkout
+# prefers them.
 STORES = {
     "R168": "Columbia",  # Columbia Mall, Columbia, MD
     "R142": "Annapolis",  # Annapolis Mall, Annapolis, MD
     "R112": "Bethesda Row",  # Bethesda, MD
     "R084": "Montgomery Mall",  # Westfield Montgomery, Bethesda, MD
+    "R516": "Carnegie Library",  # Washington, DC
+    "R287": "Georgetown",  # Washington, DC
+    "R036": "Clarendon",  # Arlington, VA
+    "R129": "Pentagon City",  # Arlington, VA
+    "R010": "Tysons Corner",  # McLean, VA
+    "R271": "Reston",  # Reston, VA
+    "R221": "Fairfax Corner",  # Fairfax, VA
+    "R598": "Stonebridge Potomac Town Center",  # Woodbridge, VA
 }
 DEFAULT_ZIP = "21044"  # searching near Columbia returns all of these stores
 BAG_URL = "https://www.apple.com/shop/bag"
@@ -93,14 +102,18 @@ def check(parts, stores, zip_code):
     return hits
 
 
+def size(hit):
+    found = re.search(r"\d+\s*[GT]B", hit.title)
+    return found.group(0) if found else hit.part
+
+
 def summary(hits):
-    """One log line: 'Columbia: 256GB no, 512GB no | Annapolis: ...'."""
-    by_store = {}
-    for h in hits:
-        size = re.search(r"\d+\s*[GT]B", h.title)
-        by_store.setdefault(h.store_name, []).append(
-            f"{size.group(0) if size else h.part} {'AVAILABLE' if h.available else 'no'}")
-    return " | ".join(f"{name}: {', '.join(v)}" for name, v in by_store.items())
+    """One log line: 'Annapolis: 512GB AVAILABLE | ...', or that no watched store has stock."""
+    found = [f"{h.store_name}: {size(h)} AVAILABLE" for h in hits if h.available]
+    if found:
+        return " | ".join(found)
+    sizes = ", ".join(dict.fromkeys(size(h) for h in hits))
+    return f"no {sizes} stock at any of {len({h.store for h in hits})} stores"
 
 
 IMESSAGE_TO = None  # phone number or Apple ID email, set by --imessage
