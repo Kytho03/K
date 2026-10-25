@@ -22,6 +22,10 @@ this uses a dedicated profile directory. Sign in to apple.com in it once:
 Then try a dry run whenever you like (it stops at Review; quit Chrome with Cmd+Q):
 
     python3 checkout.py --part MK1F4LL/A
+
+or, with the phone already set up in your bag:
+
+    python3 checkout.py --part MK1F4LL/A --from-bag
     python3 checkout.py --part MK1H4LL/A --store "Bethesda Row" --zip 20814
 """
 
@@ -243,7 +247,7 @@ def configure(page, part, carrier, trade_in, ask):
         page.wait_for_timeout(800)
 
 
-def get_to_bag(page, ask, max_steps=10):
+def get_to_bag(page, part, ask, max_steps=10):
     """From the configured buy page, through any carrier check, until the phone is in the bag."""
     for _ in range(max_steps):
         settle(page)
@@ -296,9 +300,15 @@ def get_to_bag(page, ask, max_steps=10):
             break
     else:
         raise Stuck("couldn't get the phone into the bag")
+    check_bag(page, part, ask)
 
-    if first_visible(page, page.get_by_text(re.compile(r"iPhone Duo", re.I))) is None:
-        raise Stuck("the phone didn't show up in the bag")
+
+def check_bag(page, part, ask):
+    """On the bag page: make sure the bag holds one iPhone Duo, the size for part."""
+    size = CAPACITY[part].upper()
+    settle(page)
+    if first_visible(page, page.get_by_text(re.compile(rf"iPhone Duo\b.*\b{size}\b", re.I))) is None:
+        raise Stuck(f"your bag doesn't have the iPhone Duo {size} Night Sky")
     lines = page.get_by_role("heading", name=re.compile(r"iPhone Duo", re.I))
     if lines.count() > 1:
         ask("Your bag has more than one iPhone Duo. Remove the extra one in Chrome",
@@ -431,10 +441,11 @@ def open_browser(p, profile_dir):
 
 
 def run(part, profile_dir=DEFAULT_PROFILE, zip_code=DEFAULT_ZIP, store_re=DEFAULT_STORE_RE,
-        on_result=None, on_help=None, carrier="tmobile", trade_in=True):
+        on_result=None, on_help=None, carrier="tmobile", trade_in=True, from_bag=False):
     """Drive checkout for part, call on_result(ok, message, url), then wait for the window to close.
 
     on_help(reason) is called each time a step needs the user in the Chrome window.
+    With from_bag, the phone is already set up in the bag; the buy page is skipped.
     """
     with sync_playwright() as p:
         ctx, wait_closed = open_browser(p, profile_dir)
@@ -443,8 +454,13 @@ def run(part, profile_dir=DEFAULT_PROFILE, zip_code=DEFAULT_ZIP, store_re=DEFAUL
         ask = make_ask(page, on_help)
         try:
             ensure_signed_in(page, ask)
-            configure(page, part, carrier, trade_in, ask)
-            get_to_bag(page, ask)
+            if from_bag:
+                log("checking out the phone already in your bag")
+                page.goto("https://www.apple.com/shop/bag", wait_until="domcontentloaded")
+                check_bag(page, part, ask)
+            else:
+                configure(page, part, carrier, trade_in, ask)
+                get_to_bag(page, part, ask)
             start_checkout(page)
             advance_to_review(page, zip_code, store_re, ask)
             ok, message = True, "Checkout is on the Review page. Check it over and place the order."
@@ -476,6 +492,8 @@ def main():
     p.add_argument("--carrier", choices=["tmobile", "unlocked"], default="tmobile",
                    help="tmobile: T-Mobile Equipment Installment Plan; unlocked: pay in full")
     p.add_argument("--no-trade-in", action="store_true", help="skip the iPhone 17 Pro Max trade-in")
+    p.add_argument("--from-bag", action="store_true",
+                   help="check out the phone already set up in your bag instead of configuring one")
     args = p.parse_args()
     if args.setup:
         setup(args.profile_dir)
@@ -483,7 +501,8 @@ def main():
         store_re = rf"\b{re.escape(args.store)}\b"
         sys.exit(0 if run(args.part, args.profile_dir, args.zip, store_re,
                           on_help=lambda reason: log(f"NEEDS YOU: {reason}"),
-                          carrier=args.carrier, trade_in=not args.no_trade_in) else 1)
+                          carrier=args.carrier, trade_in=not args.no_trade_in,
+                          from_bag=args.from_bag) else 1)
 
 
 if __name__ == "__main__":

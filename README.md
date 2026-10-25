@@ -44,6 +44,14 @@ read "TMOBILE_NUMBER?T-Mobile number: "; read -s "TMOBILE_PIN?T-Mobile PIN: "; e
 export TMOBILE_NUMBER TMOBILE_PIN
 ```
 
+If the phone is already set up in your bag (model, trade-in, T-Mobile plan),
+add `--from-bag` and watch just that model with `--part`. On stock it skips the
+buy page and goes straight from your bag through checkout to Review:
+
+```sh
+python3 pickup_watch.py --topic <your-ntfy-topic> --checkout --from-bag --part MK1F4LL/A
+```
+
 Use `--carrier unlocked` to pay in full instead, and `--no-trade-in` to skip the
 trade-in. Chrome blocks automation of your everyday profile, so checkout uses
 its own profile at `~/.pickup-watch-chrome`, started as a normal Chrome window

@@ -139,7 +139,7 @@ def run_checkout(args, hit):
         import checkout  # needs playwright; only loaded when --checkout is used
         checkout.run(hit.part, args.profile_dir, hit.zip, rf"\b{re.escape(hit.store_name)}\b",
                      on_result=on_result, on_help=on_help,
-                     carrier=args.carrier, trade_in=not args.no_trade_in)
+                     carrier=args.carrier, trade_in=not args.no_trade_in, from_bag=args.from_bag)
     except Exception as e:  # checkout never got far enough to report; still alert
         log(f"auto-checkout failed to start: {e}")
         notify(args.topic, f"{hit.title} in stock at {where}!",
@@ -165,6 +165,8 @@ def main():
     p.add_argument("--carrier", choices=["tmobile", "unlocked"], default="tmobile",
                    help="checkout plan: T-Mobile Equipment Installment Plan, or pay in full unlocked")
     p.add_argument("--no-trade-in", action="store_true", help="checkout without the iPhone 17 Pro Max trade-in")
+    p.add_argument("--from-bag", action="store_true",
+                   help="checkout the phone already set up in your bag (watch just its --part)")
     args = p.parse_args()
     parts = args.part or list(LINKS)
     stores = args.store or list(STORES)
