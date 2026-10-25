@@ -33,8 +33,9 @@ STORES = {
     "R168": "Columbia",  # Columbia Mall, Columbia, MD
     "R142": "Annapolis",  # Annapolis Mall, Annapolis, MD
     "R112": "Bethesda Row",  # Bethesda, MD
+    "R084": "Montgomery Mall",  # Westfield Montgomery, Bethesda, MD
 }
-DEFAULT_ZIP = "21044"  # searching near Columbia returns all three stores
+DEFAULT_ZIP = "21044"  # searching near Columbia returns all of these stores
 BAG_URL = "https://www.apple.com/shop/bag"
 
 PICKUP_URL = "https://www.apple.com/shop/retail/pickup-message"
