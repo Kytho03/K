@@ -15,6 +15,7 @@ import json
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -175,6 +176,13 @@ def notify(topic, title, message, links):
     return sent
 
 
+def keep_awake():
+    """On a Mac, stop idle and system sleep for as long as this process runs."""
+    if sys.platform == "darwin" and shutil.which("caffeinate"):
+        subprocess.Popen(["caffeinate", "-is", "-w", str(os.getpid())])
+        log("keeping this Mac awake while watching (normal sleep resumes when it stops)")
+
+
 def run_checkout(args, hit):
     """Take one in-stock part to the Review page in Chrome, then send a single alert."""
     link = link_for(hit.part)
@@ -226,6 +234,8 @@ def main():
                         "button per model), and --checkout checks out the bag")
     p.add_argument("--imessage", metavar="PHONE_OR_EMAIL",
                    help="also send each alert as an iMessage from this Mac's Messages app")
+    p.add_argument("--allow-sleep", action="store_true",
+                   help="don't keep the Mac awake while watching")
     p.add_argument("--status", action="store_true",
                    help="post every check result to the ntfy topic <topic>-status, without push "
                         "notifications (open the topic in the app to see them)")
@@ -246,6 +256,8 @@ def main():
 
     log(f"watching {', '.join(parts)} at stores {', '.join(stores)}; checking every "
         f"{args.interval:.0f}s +/- {args.jitter:.0f}s")
+    if not args.allow_sleep:
+        keep_awake()
     failures = 0
     while True:
         try:

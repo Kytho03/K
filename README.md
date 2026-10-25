@@ -8,6 +8,10 @@ the DC/Maryland/Virginia area (see `STORES` in `pickup_watch.py`) every ~2
 minutes with jitter, and sends one ntfy.sh push when either model is available
 at any of them. Use `--store` (repeatable) to watch a different set.
 
+On a Mac the watcher keeps the computer awake (via `caffeinate`) for as long as
+it runs, so it can't doze off mid-watch; normal sleep resumes when it stops.
+Keep a MacBook plugged in with the lid open. Pass `--allow-sleep` to opt out.
+
 Check the push arrives, then watch (alerts only):
 
 ```sh
