@@ -268,7 +268,7 @@ def main():
 
         # Back off on repeated errors so we don't hammer Apple if they block us.
         base = args.interval * min(2 ** max(failures - 1, 0), 8) if failures else args.interval
-        time.sleep(max(30, base + random.uniform(-args.jitter, args.jitter)))
+        time.sleep(max(10, base + random.uniform(-args.jitter, args.jitter)))
 
 
 if __name__ == "__main__":
