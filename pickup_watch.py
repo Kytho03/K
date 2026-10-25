@@ -206,8 +206,8 @@ def main():
                    help="checkout plan: T-Mobile Equipment Installment Plan, or pay in full unlocked")
     p.add_argument("--no-trade-in", action="store_true", help="checkout without the iPhone 17 Pro Max trade-in")
     p.add_argument("--from-bag", action="store_true",
-                   help="the phone is already set up in your bag (watch just its --part): alerts "
-                        "open the bag, and --checkout checks it out")
+                   help="a phone is already set up in your bag: alerts open the bag (plus a Reserve "
+                        "button per model), and --checkout checks out the bag")
     p.add_argument("--imessage", metavar="PHONE_OR_EMAIL",
                    help="also send each alert as an iMessage from this Mac's Messages app")
     p.add_argument("--status", action="store_true",
