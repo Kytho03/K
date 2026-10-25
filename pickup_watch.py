@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import json
+import os
 import random
 import sys
 import time
@@ -86,6 +87,28 @@ def notify(topic, title, message, links):
         pass
 
 
+def run_checkout(args, store_name, result):
+    """Take one in-stock part to the Review page in Chrome, then send a single alert."""
+    part, _, title, _ = result
+    link = link_for(part)
+
+    def on_result(ok, message, _url):
+        heading = (f"{title} is ready to order at Apple {store_name}" if ok
+                   else f"{title} in stock at Apple {store_name}; checkout needs you")
+        notify(args.topic, heading, message, [("Open buy page", link)])
+        log("alert sent")
+
+    log(f"{title} in stock; starting auto-checkout")
+    try:
+        import checkout  # needs playwright; only loaded when --checkout is used
+        checkout.run(part, args.profile_dir, args.zip, on_result=on_result)
+    except Exception as e:  # checkout never got far enough to report; still alert
+        log(f"auto-checkout failed to start: {e}")
+        notify(args.topic, f"{title} in stock at Apple {store_name}!",
+               f"Auto-checkout couldn't start ({e}). Reserve now: {link}", [("Reserve", link)])
+        log("alert sent")
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--topic", required=True, help="ntfy.sh topic (pick something hard to guess)")
@@ -95,6 +118,11 @@ def main():
     p.add_argument("--interval", type=float, default=120, help="base seconds between checks")
     p.add_argument("--jitter", type=float, default=30, help="max +/- seconds of random jitter")
     p.add_argument("--test-notify", action="store_true", help="send a test push and exit")
+    p.add_argument("--checkout", action="store_true",
+                   help="on stock, drive Chrome to the checkout Review page (see checkout.py)")
+    p.add_argument("--profile-dir", default=os.path.expanduser("~/.pickup-watch-chrome"),
+                   help="Chrome profile used by --checkout")
+    p.add_argument("--zip", default="21044", help="ZIP used to find the store at checkout")
     args = p.parse_args()
     parts = args.part or list(LINKS)
 
@@ -114,6 +142,9 @@ def main():
             log(" | ".join(f"{title}: {'AVAILABLE' if ok else 'unavailable'}"
                            for _, ok, title, _ in results))
             in_stock = [r for r in results if r[1]]
+            if in_stock and args.checkout:
+                run_checkout(args, store_name, in_stock[0])
+                return
             if in_stock:
                 notify(
                     args.topic,
