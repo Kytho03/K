@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import csv
 import json
 import os
 import random
@@ -89,17 +90,30 @@ def check(parts, stores, zip_code):
         if store not in found:
             raise RuntimeError(f"store {store} not in response")
 
+    return [h for store in stores for h in store_hits(found[store], parts, zip_code)]
+
+
+def check_near(parts, zips, skip):
+    """Return a Hit for every (store, part) Apple lists near the ZIPs, except stores in skip."""
+    found = {}
+    for zip_code in zips:
+        for info in fetch(parts, location=zip_code):
+            if info.get("storeNumber") not in skip:
+                found.setdefault(info.get("storeNumber"), info)
+    return [h for info in found.values() for h in store_hits(info, parts, "")]
+
+
+def store_hits(info, parts, zip_code):
+    store = info.get("storeNumber")
+    name = info.get("storeName", store)
+    zip_ = (info.get("address") or {}).get("postalCode") or zip_code
     hits = []
-    for store in stores:
-        info = found[store]
-        name = info.get("storeName", store)
-        zip_ = (info.get("address") or {}).get("postalCode") or zip_code
-        for part in parts:
-            avail = info["partsAvailability"][part]
-            regular = avail.get("messageTypes", {}).get("regular", {})
-            hits.append(Hit(store, name, zip_, part, avail.get("pickupDisplay") == "available",
-                            regular.get("storePickupProductTitle", part),
-                            regular.get("storePickupQuote", "")))
+    for part in parts:
+        avail = info["partsAvailability"][part]
+        regular = avail.get("messageTypes", {}).get("regular", {})
+        hits.append(Hit(store, name, zip_, part, avail.get("pickupDisplay") == "available",
+                        regular.get("storePickupProductTitle", part),
+                        regular.get("storePickupQuote", "")))
     return hits
 
 
@@ -176,6 +190,38 @@ def notify(topic, title, message, links):
     return sent
 
 
+def record_changes(topic, hits, prev, path):
+    """Log stock that came in or sold out since the last check, to the console, to
+    <topic>-changes (no push) and to the CSV at path. Returns the (store, part)s now in stock."""
+    now = {(h.store, h.part) for h in hits if h.available}
+    for h in hits:
+        key = (h.store, h.part)
+        if key in now and key not in prev:
+            event, tag = "IN STOCK", "green_circle"
+        elif key in prev and key not in now:
+            event, tag = "SOLD OUT", "red_circle"
+        else:
+            continue
+        where = f"Apple {h.store_name}" + (f" ({h.zip})" if h.zip else "")
+        log(f"{event}: {h.title} at {where}")
+        try:
+            send_ntfy(f"{topic}-changes", event, f"{h.title} at {where}", priority="min", tags=tag,
+                      push=False)
+        except (urllib.error.URLError, ValueError) as e:
+            log(f"changes feed update failed: {e}")
+        try:
+            new_file = not os.path.exists(path)
+            with open(path, "a", newline="") as f:
+                out = csv.writer(f)
+                if new_file:
+                    out.writerow(["time", "event", "store", "store_name", "zip", "part", "model"])
+                out.writerow([time.strftime("%Y-%m-%d %H:%M:%S"), event, h.store, h.store_name, h.zip,
+                              h.part, h.title])
+        except OSError as e:
+            log(f"couldn't write {path}: {e}")
+    return now
+
+
 def keep_awake():
     """On a Mac, stop idle and system sleep for as long as this process runs."""
     if sys.platform == "darwin" and shutil.which("caffeinate"):
@@ -239,6 +285,13 @@ def main():
     p.add_argument("--status", action="store_true",
                    help="post every check result to the ntfy topic <topic>-status, without push "
                         "notifications (open the topic in the app to see them)")
+    p.add_argument("--changes", action="store_true",
+                   help="keep watching after alerts, alert again whenever stock newly appears, and log "
+                        "every in-stock/sold-out change to <topic>-changes (no push) and --changes-file")
+    p.add_argument("--changes-file", default="stock_changes.csv", help="CSV log for --changes")
+    p.add_argument("--near", action="append", default=[], metavar="ZIP",
+                   help="with --changes, also track every store Apple lists near this ZIP (repeatable; "
+                        "changes feed only, no alerts; one extra request per ZIP per check)")
     args = p.parse_args()
     global IMESSAGE_TO
     IMESSAGE_TO = args.imessage
@@ -256,21 +309,29 @@ def main():
 
     log(f"watching {', '.join(parts)} at stores {', '.join(stores)}; checking every "
         f"{args.interval:.0f}s +/- {args.jitter:.0f}s")
+    if args.near and not args.changes:
+        p.error("--near only feeds the changes log; add --changes")
     if not args.allow_sleep:
         keep_awake()
     failures = 0
+    prev = set()  # (store, part)s in stock at the last check, for --changes
     while True:
         try:
             hits = check(parts, stores, args.zip)
+            extra = check_near(parts, args.near, set(stores)) if args.near else []
             failures = 0
             log(summary(hits))
             if args.status:
                 post_status(args.topic, summary(hits))
             in_stock = [h for h in hits if h.available]
+            if args.changes:  # alert only on stock that wasn't there last check
+                in_stock = [h for h in in_stock if (h.store, h.part) not in prev]
+                prev = record_changes(args.topic, hits + extra, prev, args.changes_file)
             if in_stock and args.checkout:
                 run_checkout(args, in_stock[0])
-                return
-            if in_stock:
+                if not args.changes:
+                    return
+            elif in_stock:
                 links = {}
                 for h in in_stock:
                     links.setdefault(h.part, (f"Reserve {h.title}", link_for(h.part)))
@@ -285,10 +346,14 @@ def main():
                     + "\n" + "\n".join(url for _, url in links.values()),
                     actions,
                 )
-                if alerted:
+                if alerted and not args.changes:
                     log("alert sent; exiting")
                     return
-                log("alert failed; trying again next check")
+                if alerted:
+                    log("alert sent; still watching")
+                else:
+                    log("alert failed; trying again next check")
+                    prev -= {(h.store, h.part) for h in in_stock}
         except (urllib.error.URLError, RuntimeError, KeyError, ValueError) as e:
             failures += 1
             log(f"check failed ({failures} in a row): {e}")

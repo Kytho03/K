@@ -28,6 +28,14 @@ Add `--status` to post every check result (or failed check) to the ntfy topic
 in the ntfy app and open it (pull down to refresh) for a live feed of what the
 watcher sees; only real stock alerts, on your main topic, notify your phone.
 
+Add `--changes` to keep a log like a "recent changes" list: every time a model
+comes into stock or sells out at a watched store, it's posted to the ntfy topic
+`<your-ntfy-topic>-changes` (no push; open the topic in the app) and appended to
+`stock_changes.csv`. In this mode the watcher keeps running after an alert and
+alerts again whenever stock newly appears. `--near <ZIP>` (repeatable) also
+tracks every store Apple lists near that ZIP, in the changes log only; each one
+adds a request per check.
+
 ### Auto-checkout to the Review page
 
 With `--checkout`, on stock it opens Chrome and, signed in to your Apple
