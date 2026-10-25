@@ -64,7 +64,7 @@ def link_for(part):
     return LINKS.get(part, f"https://www.apple.com/shop/product/{part}")
 
 
-Hit = namedtuple("Hit", "store store_name zip part available title quote")
+Hit = namedtuple("Hit", "store store_name zip part available title quote place", defaults=("",))
 
 
 def fetch(parts, **where):
@@ -113,7 +113,8 @@ def store_hits(info, parts, zip_code):
         regular = avail.get("messageTypes", {}).get("regular", {})
         hits.append(Hit(store, name, zip_, part, avail.get("pickupDisplay") == "available",
                         regular.get("storePickupProductTitle", part),
-                        regular.get("storePickupQuote", "")))
+                        regular.get("storePickupQuote", ""),
+                        ", ".join(x for x in (info.get("city"), info.get("state")) if x)))
     return hits
 
 
@@ -190,9 +191,9 @@ def notify(topic, title, message, links):
     return sent
 
 
-def record_changes(topic, hits, prev, path):
-    """Log stock that came in or sold out since the last check, to the console, to
-    <topic>-changes (no push) and to the CSV at path. Returns the (store, part)s now in stock."""
+def record_changes(feed_topic, hits, prev, path):
+    """Log stock that came in or sold out since the last check, to the console, to the ntfy
+    feed_topic (no push) and to the CSV at path. Returns the (store, part)s now in stock."""
     now = {(h.store, h.part) for h in hits if h.available}
     for h in hits:
         key = (h.store, h.part)
@@ -202,11 +203,10 @@ def record_changes(topic, hits, prev, path):
             event, tag = "SOLD OUT", "red_circle"
         else:
             continue
-        where = f"Apple {h.store_name}" + (f" ({h.zip})" if h.zip else "")
+        where = f"Apple {h.store_name}" + (f" ({h.place or h.zip})" if h.place or h.zip else "")
         log(f"{event}: {h.title} at {where}")
         try:
-            send_ntfy(f"{topic}-changes", event, f"{h.title} at {where}", priority="min", tags=tag,
-                      push=False)
+            send_ntfy(feed_topic, event, f"{h.title} at {where}", priority="min", tags=tag, push=False)
         except (urllib.error.URLError, ValueError) as e:
             log(f"changes feed update failed: {e}")
         try:
@@ -214,9 +214,9 @@ def record_changes(topic, hits, prev, path):
             with open(path, "a", newline="") as f:
                 out = csv.writer(f)
                 if new_file:
-                    out.writerow(["time", "event", "store", "store_name", "zip", "part", "model"])
-                out.writerow([time.strftime("%Y-%m-%d %H:%M:%S"), event, h.store, h.store_name, h.zip,
-                              h.part, h.title])
+                    out.writerow(["time", "event", "store", "store_name", "place", "zip", "part", "model"])
+                out.writerow([time.strftime("%Y-%m-%d %H:%M:%S"), event, h.store, h.store_name, h.place,
+                              h.zip, h.part, h.title])
         except OSError as e:
             log(f"couldn't write {path}: {e}")
     return now
@@ -326,7 +326,7 @@ def main():
             in_stock = [h for h in hits if h.available]
             if args.changes:  # alert only on stock that wasn't there last check
                 in_stock = [h for h in in_stock if (h.store, h.part) not in prev]
-                prev = record_changes(args.topic, hits + extra, prev, args.changes_file)
+                prev = record_changes(f"{args.topic}-changes", hits + extra, prev, args.changes_file)
             if in_stock and args.checkout:
                 run_checkout(args, in_stock[0])
                 if not args.changes:
