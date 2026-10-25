@@ -114,8 +114,10 @@ end run
 """
 
 
-def send_ntfy(topic, title, message, links=(), priority="urgent", tags="iphone,rotating_light"):
+def send_ntfy(topic, title, message, links=(), priority="urgent", tags="iphone,rotating_light", push=True):
     headers = {"Title": title, "Priority": priority, "Tags": tags}
+    if not push:  # keep it on the topic for the app to fetch, but don't push it to the phone
+        headers["Firebase"] = "no"
     if links:
         headers["Click"] = links[0][1]
         headers["Actions"] = "; ".join(f"view, {label}, {url}" for label, url in links[:3])
@@ -126,9 +128,9 @@ def send_ntfy(topic, title, message, links=(), priority="urgent", tags="iphone,r
 
 
 def post_status(topic, text):
-    """Post a check result to <topic>-status at normal priority (a regular notification)."""
+    """Post a check result to <topic>-status for the ntfy app's feed, without a push notification."""
     try:
-        send_ntfy(f"{topic}-status", "Pickup watcher", text, priority="default", tags="eyes")
+        send_ntfy(f"{topic}-status", "Pickup watcher", text, priority="min", tags="eyes", push=False)
     except (urllib.error.URLError, ValueError) as e:
         log(f"status update failed: {e}")
 
@@ -211,7 +213,8 @@ def main():
     p.add_argument("--imessage", metavar="PHONE_OR_EMAIL",
                    help="also send each alert as an iMessage from this Mac's Messages app")
     p.add_argument("--status", action="store_true",
-                   help="post every check result to the ntfy topic <topic>-status")
+                   help="post every check result to the ntfy topic <topic>-status, without push "
+                        "notifications (open the topic in the app to see them)")
     args = p.parse_args()
     global IMESSAGE_TO
     IMESSAGE_TO = args.imessage
