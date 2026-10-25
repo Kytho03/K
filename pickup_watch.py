@@ -61,7 +61,10 @@ def fetch(parts, **where):
         headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
     )
     with urllib.request.urlopen(req, timeout=20) as resp:
-        return json.load(resp)["body"]["stores"]
+        body = json.load(resp).get("body") or {}
+    if "stores" not in body:
+        raise RuntimeError("Apple's response had no stores (check the part numbers)")
+    return body["stores"]
 
 
 def check(parts, stores, zip_code):
@@ -170,6 +173,9 @@ def main():
     args = p.parse_args()
     parts = args.part or list(LINKS)
     stores = args.store or list(STORES)
+    unknown = [part for part in parts if part not in LINKS]
+    if unknown:
+        p.error(f"unknown part {', '.join(unknown)}; use one of {', '.join(LINKS)}")
 
     if args.test_notify:
         notify(args.topic, "Test: pickup watcher", "Notifications are working.",
