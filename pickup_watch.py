@@ -35,6 +35,7 @@ STORES = {
     "R112": "Bethesda Row",  # Bethesda, MD
 }
 DEFAULT_ZIP = "21044"  # searching near Columbia returns all three stores
+BAG_URL = "https://www.apple.com/shop/bag"
 
 PICKUP_URL = "https://www.apple.com/shop/retail/pickup-message"
 USER_AGENT = (
@@ -205,7 +206,8 @@ def main():
                    help="checkout plan: T-Mobile Equipment Installment Plan, or pay in full unlocked")
     p.add_argument("--no-trade-in", action="store_true", help="checkout without the iPhone 17 Pro Max trade-in")
     p.add_argument("--from-bag", action="store_true",
-                   help="checkout the phone already set up in your bag (watch just its --part)")
+                   help="the phone is already set up in your bag (watch just its --part): alerts "
+                        "open the bag, and --checkout checks it out")
     p.add_argument("--imessage", metavar="PHONE_OR_EMAIL",
                    help="also send each alert as an iMessage from this Mac's Messages app")
     p.add_argument("--status", action="store_true",
@@ -244,12 +246,15 @@ def main():
                 for h in in_stock:
                     links.setdefault(h.part, (f"Reserve {h.title}", link_for(h.part)))
                 where = ", ".join(dict.fromkeys(f"Apple {h.store_name}" for h in in_stock))
+                actions = list(links.values())
+                if args.from_bag:  # the phone is set up in the bag: tapping the alert opens it
+                    actions.insert(0, ("Open bag", BAG_URL))
                 alerted = notify(
                     args.topic,
                     f"In stock for pickup at {where}!",
                     "\n".join(f"{h.title} at Apple {h.store_name}: {h.quote}" for h in in_stock)
                     + "\n" + "\n".join(url for _, url in links.values()),
-                    list(links.values()),
+                    actions,
                 )
                 if alerted:
                     log("alert sent; exiting")
