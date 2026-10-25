@@ -2,7 +2,7 @@
 """Drive an Apple Store checkout for one iPhone up to the Review page.
 
 Opens a visible Chrome window on a persistent profile, configures the phone on
-its buy page, adds it to the bag, chooses in-store pickup at the target store,
+its buy page, adds it to the bag, chooses in-store pickup at the given store,
 and clicks through checkout until the Review page. It never places the order:
 any button that looks like "Place Order" is refused. The browser stays open for
 you to review and place the order yourself.
@@ -15,6 +15,7 @@ this uses a dedicated profile directory. Sign in to apple.com in it once:
 Then try a dry run whenever you like (it stops at Review; just close the window):
 
     python3 checkout.py --part MK1F4LL/A
+    python3 checkout.py --part MK1H4LL/A --store "Bethesda Row" --zip 20814
 """
 
 import argparse
@@ -29,6 +30,7 @@ from playwright.sync_api import sync_playwright
 
 DEFAULT_PROFILE = os.path.expanduser("~/.pickup-watch-chrome")
 DEFAULT_ZIP = "21044"  # Columbia, MD
+DEFAULT_STORE = "Columbia"
 DEFAULT_STORE_RE = r"\bColumbia\b"
 
 BUY_PAGES = {
@@ -156,8 +158,8 @@ def choose_pickup(page, zip_code, store_re):
         option = first_visible(page, page.get_by_role("radio", name=store),
                                page.locator("label").filter(has_text=store))
     if option is None:
-        raise Stuck("the Columbia store isn't offered for pickup")
-    log("selecting the Columbia store")
+        raise Stuck(f"no store matching {store_re!r} is offered for pickup near {zip_code}")
+    log(f"selecting the store matching {store_re!r}")
     option.click(force=True)
     page.wait_for_timeout(1500)
 
@@ -222,7 +224,7 @@ def run(part, profile_dir=DEFAULT_PROFILE, zip_code=DEFAULT_ZIP, store_re=DEFAUL
             ok, message = True, "Checkout is on the Review page. Check it over and place the order."
         except Stuck as e:
             ok, message = False, f"Auto-checkout stopped: {e}. Finish in the open Chrome window."
-        except (PlaywrightError, RuntimeError) as e:
+        except Exception as e:  # anything unexpected: still alert and leave the window open
             ok, message = False, f"Auto-checkout hit an error ({e}). Finish in the open Chrome window."
         log(message)
         if on_result:
@@ -249,12 +251,14 @@ def main():
     p.add_argument("--setup", action="store_true", help="open the profile to sign in to apple.com")
     p.add_argument("--part", choices=list(BUY_PAGES), default="MK1F4LL/A")
     p.add_argument("--profile-dir", default=DEFAULT_PROFILE)
-    p.add_argument("--zip", default=DEFAULT_ZIP)
+    p.add_argument("--store", default=DEFAULT_STORE, help="store name, e.g. Annapolis or \"Bethesda Row\"")
+    p.add_argument("--zip", default=DEFAULT_ZIP, help="ZIP to search pickup stores near")
     args = p.parse_args()
     if args.setup:
         setup(args.profile_dir)
     else:
-        sys.exit(0 if run(args.part, args.profile_dir, args.zip) else 1)
+        store_re = rf"\b{re.escape(args.store)}\b"
+        sys.exit(0 if run(args.part, args.profile_dir, args.zip, store_re) else 1)
 
 
 if __name__ == "__main__":
