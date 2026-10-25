@@ -125,9 +125,9 @@ def send_ntfy(topic, title, message, links=(), priority="urgent", tags="iphone,r
 
 
 def post_status(topic, text):
-    """Post a check result to <topic>-status at the lowest priority (no sound or buzz)."""
+    """Post a check result to <topic>-status at normal priority (a regular notification)."""
     try:
-        send_ntfy(f"{topic}-status", "Pickup watcher", text, priority="min", tags="eyes")
+        send_ntfy(f"{topic}-status", "Pickup watcher", text, priority="default", tags="eyes")
     except (urllib.error.URLError, ValueError) as e:
         log(f"status update failed: {e}")
 
@@ -209,7 +209,7 @@ def main():
     p.add_argument("--imessage", metavar="PHONE_OR_EMAIL",
                    help="also send each alert as an iMessage from this Mac's Messages app")
     p.add_argument("--status", action="store_true",
-                   help="post every check result, silently, to the ntfy topic <topic>-status")
+                   help="post every check result to the ntfy topic <topic>-status")
     args = p.parse_args()
     global IMESSAGE_TO
     IMESSAGE_TO = args.imessage

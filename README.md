@@ -20,9 +20,9 @@ your phone number or Apple ID email), add `--imessage <phone-or-email>`. The
 first time, macOS asks to let Terminal control Messages; allow it.
 
 Add `--status` to post every check result (or failed check) to the ntfy topic
-`<your-ntfy-topic>-status` at the lowest priority, so it arrives silently.
-Subscribe to that topic in the ntfy app for a live feed of what the watcher
-sees; real stock alerts still go to your main topic at urgent priority.
+`<your-ntfy-topic>-status` as a normal notification. Subscribe to that topic in
+the ntfy app for a live feed of what the watcher sees (mute it there if it gets
+too chatty); real stock alerts still go to your main topic at urgent priority.
 
 ### Auto-checkout to the Review page
 
