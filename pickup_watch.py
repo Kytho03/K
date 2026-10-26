@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -154,6 +155,17 @@ def send_ntfy(topic, title, message, links=(), priority="urgent", tags="iphone,r
         pass
 
 
+def repeat_alert(topic, title, message, links, times, every=30):
+    """Resend an ntfy alert `times` more times, `every` seconds apart, without pausing the watcher."""
+    def resend(n):
+        try:
+            send_ntfy(topic, f"{title} (repeat {n}/{times})", message, links)
+        except (urllib.error.URLError, ValueError) as e:
+            log(f"repeat alert failed: {e}")
+    for n in range(1, times + 1):
+        threading.Timer(every * n, resend, args=(n,)).start()
+
+
 def post_status(topic, text):
     """Post a check result to <topic>-status for the ntfy app's feed, without a push notification."""
     try:
@@ -277,6 +289,8 @@ def main():
                         "button per model), and --checkout checks out the bag")
     p.add_argument("--imessage", metavar="PHONE_OR_EMAIL",
                    help="also send each alert as an iMessage from this Mac's Messages app")
+    p.add_argument("--repeat", type=int, default=0, metavar="N",
+                   help="resend each stock alert by ntfy N more times, 30 seconds apart")
     p.add_argument("--allow-sleep", action="store_true",
                    help="don't keep the Mac awake while watching")
     p.add_argument("--status", action="store_true",
@@ -336,13 +350,12 @@ def main():
                 actions = list(links.values())
                 if args.from_bag:  # the phone is set up in the bag: tapping the alert opens it
                     actions.insert(0, ("Open bag", BAG_URL))
-                alerted = notify(
-                    args.topic,
-                    f"In stock for pickup at {where}!",
-                    "\n".join(f"{h.title} at Apple {h.store_name}: {h.quote}" for h in in_stock)
-                    + "\n" + "\n".join(url for _, url in links.values()),
-                    actions,
-                )
+                title = f"In stock for pickup at {where}!"
+                message = ("\n".join(f"{h.title} at Apple {h.store_name}: {h.quote}" for h in in_stock)
+                           + "\n" + "\n".join(url for _, url in links.values()))
+                alerted = notify(args.topic, title, message, actions)
+                if alerted and args.repeat:
+                    repeat_alert(args.topic, title, message, actions, args.repeat)
                 if alerted and not args.changes:
                     log("alert sent; exiting")
                     return
