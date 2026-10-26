@@ -155,15 +155,27 @@ def send_ntfy(topic, title, message, links=(), priority="urgent", tags="iphone,r
         pass
 
 
-def repeat_alert(topic, title, message, links, times, every=12):
-    """Resend an ntfy alert `times` more times, `every` seconds apart, without pausing the watcher."""
+def alert_schedule(repeat, every, bursts=1, gap=4):
+    """Seconds after the first alert to send each follow-up: `bursts` bursts of 1 + repeat
+    alerts `every` seconds apart, each burst starting `gap` seconds after the previous one ends."""
+    delays, start = [], 0.0
+    for _ in range(bursts):
+        delays += [start + i * every for i in range(repeat + 1)]
+        start = delays[-1] + gap
+    return delays[1:]  # the first alert has already gone out
+
+
+def repeat_alert(topic, title, message, links, delays):
+    """Resend an ntfy alert after each of `delays` seconds, without pausing the watcher."""
+    total = len(delays) + 1
+
     def resend(n):
         try:
-            send_ntfy(topic, f"{title} (repeat {n}/{times})", message, links)
+            send_ntfy(topic, f"{title} ({n}/{total})", message, links)
         except (urllib.error.URLError, ValueError) as e:
             log(f"repeat alert failed: {e}")
-    for n in range(1, times + 1):
-        threading.Timer(every * n, resend, args=(n,)).start()
+    for n, delay in enumerate(delays, start=2):
+        threading.Timer(delay, resend, args=(n,)).start()
 
 
 def post_status(topic, text):
@@ -293,6 +305,10 @@ def main():
                    help="resend each stock alert by ntfy N more times, --repeat-every seconds apart")
     p.add_argument("--repeat-every", type=float, default=12, metavar="SECONDS",
                    help="seconds between repeated stock alerts (default 12)")
+    p.add_argument("--bursts", type=int, default=1, metavar="N",
+                   help="send the alert plus its --repeat copies as N bursts (default 1)")
+    p.add_argument("--burst-gap", type=float, default=4, metavar="SECONDS",
+                   help="pause between bursts (default 4)")
     p.add_argument("--allow-sleep", action="store_true",
                    help="don't keep the Mac awake while watching")
     p.add_argument("--status", action="store_true",
@@ -356,8 +372,9 @@ def main():
                 message = ("\n".join(f"{h.title} at Apple {h.store_name}: {h.quote}" for h in in_stock)
                            + "\n" + "\n".join(url for _, url in links.values()))
                 alerted = notify(args.topic, title, message, actions)
-                if alerted and args.repeat:
-                    repeat_alert(args.topic, title, message, actions, args.repeat, args.repeat_every)
+                if alerted and (args.repeat or args.bursts > 1):
+                    repeat_alert(args.topic, title, message, actions,
+                                 alert_schedule(args.repeat, args.repeat_every, args.bursts, args.burst_gap))
                 if alerted and not args.changes:
                     log("alert sent; exiting")
                     return

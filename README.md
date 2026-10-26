@@ -25,6 +25,9 @@ first time, macOS asks to let Terminal control Messages; allow it.
 
 Add `--repeat 3` to resend each stock alert by ntfy three more times, 12
 seconds apart (change with `--repeat-every`), so it's harder to sleep through.
+For a buzzing pattern, send it in bursts: `--repeat 2 --repeat-every 1 --bursts 3
+--burst-gap 4` sends three bursts of three alerts a second apart, 4 seconds
+between bursts.
 
 Add `--status` to post every check result (or failed check) to the ntfy topic
 `<your-ntfy-topic>-status` without a push notification. Subscribe to that topic
