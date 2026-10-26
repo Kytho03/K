@@ -23,8 +23,8 @@ To also get each alert as an iMessage (sent from this Mac's Messages app to
 your phone number or Apple ID email), add `--imessage <phone-or-email>`. The
 first time, macOS asks to let Terminal control Messages; allow it.
 
-Add `--repeat 3` to resend each stock alert by ntfy three more times, 30
-seconds apart, so it's harder to sleep through.
+Add `--repeat 3` to resend each stock alert by ntfy three more times, 12
+seconds apart (change with `--repeat-every`), so it's harder to sleep through.
 
 Add `--status` to post every check result (or failed check) to the ntfy topic
 `<your-ntfy-topic>-status` without a push notification. Subscribe to that topic

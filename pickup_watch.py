@@ -155,7 +155,7 @@ def send_ntfy(topic, title, message, links=(), priority="urgent", tags="iphone,r
         pass
 
 
-def repeat_alert(topic, title, message, links, times, every=30):
+def repeat_alert(topic, title, message, links, times, every=12):
     """Resend an ntfy alert `times` more times, `every` seconds apart, without pausing the watcher."""
     def resend(n):
         try:
@@ -290,7 +290,9 @@ def main():
     p.add_argument("--imessage", metavar="PHONE_OR_EMAIL",
                    help="also send each alert as an iMessage from this Mac's Messages app")
     p.add_argument("--repeat", type=int, default=0, metavar="N",
-                   help="resend each stock alert by ntfy N more times, 30 seconds apart")
+                   help="resend each stock alert by ntfy N more times, --repeat-every seconds apart")
+    p.add_argument("--repeat-every", type=float, default=12, metavar="SECONDS",
+                   help="seconds between repeated stock alerts (default 12)")
     p.add_argument("--allow-sleep", action="store_true",
                    help="don't keep the Mac awake while watching")
     p.add_argument("--status", action="store_true",
@@ -355,7 +357,7 @@ def main():
                            + "\n" + "\n".join(url for _, url in links.values()))
                 alerted = notify(args.topic, title, message, actions)
                 if alerted and args.repeat:
-                    repeat_alert(args.topic, title, message, actions, args.repeat)
+                    repeat_alert(args.topic, title, message, actions, args.repeat, args.repeat_every)
                 if alerted and not args.changes:
                     log("alert sent; exiting")
                     return
