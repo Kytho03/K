@@ -47,6 +47,18 @@ STORES = {
 DEFAULT_ZIP = "21044"  # searching near Columbia returns all of these stores
 BAG_URL = "https://www.apple.com/shop/bag"
 
+# Every iPhone Duo model, for --feed-all and us_stock_tracker.py.
+ALL_MODELS = {
+    "MK1E4LL/A": "256GB Star White",
+    "MK1F4LL/A": "256GB Night Sky",
+    "MK1G4LL/A": "512GB Star White",
+    "MK1H4LL/A": "512GB Night Sky",
+    "MK1J4LL/A": "1TB Star White",
+    "MK1L4LL/A": "1TB Night Sky",
+    "MK1Q4LL/A": "2TB Star White",
+    "MK1R4LL/A": "2TB Night Sky",
+}
+
 PICKUP_URL = "https://www.apple.com/shop/retail/pickup-message"
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -318,6 +330,10 @@ def main():
                    help="keep watching after alerts, alert again whenever stock newly appears, and log "
                         "every in-stock/sold-out change to <topic>-changes (no push) and --changes-file")
     p.add_argument("--changes-file", default="stock_changes.csv", help="CSV log for --changes")
+    p.add_argument("--changes-topic", metavar="TOPIC",
+                   help="ntfy topic for --changes (default <topic>-changes)")
+    p.add_argument("--feed-all", action="store_true",
+                   help="with --changes, log every iPhone Duo size and colour (alerts stay on --part)")
     p.add_argument("--near", action="append", default=[], metavar="ZIP",
                    help="with --changes, also track every store Apple lists near this ZIP (repeatable; "
                         "changes feed only, no alerts; one extra request per ZIP per check)")
@@ -329,6 +345,7 @@ def main():
     unknown = [part for part in parts if part not in LINKS]
     if unknown:
         p.error(f"unknown part {', '.join(unknown)}; use one of {', '.join(LINKS)}")
+    feed_parts = parts + [m for m in ALL_MODELS if m not in parts] if args.feed_all else parts
 
     if args.test_notify:
         ok = notify(args.topic, "Test: pickup watcher", "Notifications are working.",
@@ -346,8 +363,9 @@ def main():
     prev = set()  # (store, part)s in stock at the last check, for --changes
     while True:
         try:
-            hits = check(parts, stores, args.zip)
-            extra = check_near(parts, args.near, set(stores)) if args.near else []
+            every = check(feed_parts, stores, args.zip)  # feed_parts covers parts
+            hits = [h for h in every if h.part in parts]
+            extra = check_near(feed_parts, args.near, set(stores)) if args.near else []
             failures = 0
             log(summary(hits))
             if args.status:
@@ -355,7 +373,8 @@ def main():
             in_stock = [h for h in hits if h.available]
             if args.changes:  # alert only on stock that wasn't there last check
                 in_stock = [h for h in in_stock if (h.store, h.part) not in prev]
-                prev = record_changes(f"{args.topic}-changes", hits + extra, prev, args.changes_file)
+                prev = record_changes(args.changes_topic or f"{args.topic}-changes", every + extra, prev,
+                                      args.changes_file)
             if in_stock and args.checkout:
                 run_checkout(args, in_stock[0])
                 if not args.changes:

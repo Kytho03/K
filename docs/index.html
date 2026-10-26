@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Duo Restock Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow column; "in stock now" summary, then filters, then the change log by day. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #16191f;
+  --muted: #5d6573;
+  --line: #e1e4ea;
+  --accent: #2f4fd8;
+  --in: #0f7a43;
+  --in-bg: #e2f4ea;
+  --out: #b4302b;
+  --out-bg: #fbe7e5;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101318; --surface: #181c23; --fg: #e8eaee; --muted: #9aa2b0; --line: #2a303a;
+    --accent: #8ea2ff; --in: #5fd497; --in-bg: #12301f; --out: #ff8f87; --out-bg: #3a1a18;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--font-body);
+  padding-block: max(20px, env(safe-area-inset-top, 0px)) max(32px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 720px; margin: 0 auto; display: grid; gap: 20px; }
+header { display: grid; gap: 4px; }
+h1 { margin: 0; font-size: 1.5rem; line-height: 1.2; text-wrap: balance; }
+h2 { margin: 0; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.status { color: var(--muted); font-size: 0.875rem; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--in); display: inline-block; margin-right: 6px; }
+.dot.stale { background: var(--out); }
+section { display: grid; gap: 10px; }
+.now { display: grid; gap: 8px; }
+.now-item {
+  background: var(--in-bg); color: var(--in); border-radius: 10px; padding: 10px 12px;
+  display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+.now-item b { color: var(--fg); font-weight: 600; }
+.now-item .since { font-family: var(--font-mono); font-size: 0.8125rem; }
+.empty { color: var(--muted); background: var(--surface); border: 1px dashed var(--line); border-radius: 10px; padding: 12px; }
+.filters { display: grid; gap: 8px; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font: 500 0.8125rem var(--font-body); color: var(--fg); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer;
+}
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.chip:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.log { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.day { padding: 8px 14px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); background: var(--bg); border-top: 1px solid var(--line); }
+.day:first-child { border-top: 0; }
+.entry { display: grid; grid-template-columns: 4.6rem 5.6rem 1fr; gap: 10px; align-items: baseline; padding: 9px 14px; border-top: 1px solid var(--line); }
+.entry .time { font-family: var(--font-mono); font-size: 0.8125rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.badge { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.06em; border-radius: 6px; padding: 2px 6px; text-align: center; }
+.badge.in { color: var(--in); background: var(--in-bg); }
+.badge.out { color: var(--out); background: var(--out-bg); }
+.entry .what { min-width: 0; }
+.entry .where { color: var(--muted); font-size: 0.875rem; }
+.note { color: var(--muted); font-size: 0.8125rem; }
+.setup { display: grid; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.setup form { display: flex; flex-wrap: wrap; gap: 8px; }
+.setup input { flex: 1 1 220px; min-width: 0; font: 15px var(--font-mono); padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); }
+button.primary { font: 600 0.875rem var(--font-body); color: var(--surface); background: var(--accent); border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+@media (max-width: 480px) {
+  .entry { grid-template-columns: 4.2rem 1fr; }
+  .entry .badge { grid-column: 2; justify-self: start; }
+  .entry .what { grid-column: 1 / -1; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .entry.fresh { animation: flash 2s ease-out; }
+  @keyframes flash { from { background: var(--in-bg); } to { background: transparent; } }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>iPhone Duo restock log</h1>
+    <div class="status" id="status">Loading…</div>
+  </header>
+
+  <div class="setup" id="setup" hidden>
+    <h2>Connect your feed</h2>
+    <p class="note">Enter the ntfy topic your stock tracker posts changes to (it ends in <code>-us</code>). It's saved in this browser only.</p>
+    <form id="topic-form">
+      <input id="topic-input" name="topic" placeholder="your-topic-us" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+      <button class="primary" type="submit">Show changes</button>
+    </form>
+  </div>
+
+  <section id="now-section" hidden>
+    <h2>In stock now</h2>
+    <div class="now" id="now"></div>
+  </section>
+
+  <section id="log-section" hidden>
+    <h2>Recent changes</h2>
+    <div class="filters">
+      <div class="row" role="group" aria-label="Event">
+        <button class="chip" data-filter="event" data-value="all">All</button>
+        <button class="chip" data-filter="event" data-value="in">In stock</button>
+        <button class="chip" data-filter="event" data-value="out">Sold out</button>
+      </div>
+      <div class="row" role="group" aria-label="Stores">
+        <button class="chip" data-filter="where" data-value="all">All US stores</button>
+        <button class="chip" data-filter="where" data-value="mine">My 9 stores</button>
+      </div>
+      <div class="row" role="group" aria-label="Model">
+        <button class="chip" data-filter="model" data-value="all">Any model</button>
+        <button class="chip" data-filter="model" data-value="256GB Night Sky">256GB Night Sky</button>
+        <button class="chip" data-filter="model" data-value="512GB Night Sky">512GB Night Sky</button>
+        <button class="chip" data-filter="model" data-value="night">Any Night Sky</button>
+        <button class="chip" data-filter="model" data-value="white">Any Star White</button>
+      </div>
+      <div class="row">
+        <button class="chip" id="sound" aria-pressed="false">Beep on new stock</button>
+      </div>
+    </div>
+    <div class="log" id="log"></div>
+    <p class="note" id="footnote"></p>
+  </section>
+</div>
+
+<script>
+(() => {
+  const MY_STORES = ["Columbia", "Annapolis", "Bethesda Row", "Montgomery Mall", "Carnegie Library",
+                     "Georgetown", "Clarendon", "Pentagon City", "Tysons Corner"];
+  const KEEP_DAYS = 7, POLL_MS = 15000;
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  };
+
+  const params = new URLSearchParams(location.search);
+  let topic = (params.get("topic") || store.get("topic", "")).trim();
+  let events = store.get("events:" + topic, []);
+  let filters = store.get("filters", { event: "all", where: "all", model: "all" });
+  let sound = false, lastOk = 0, timer = null, firstLoad = true;
+
+  // "iPhone Duo 1TB Star White at Apple Clarendon (Arlington, VA)"
+  function parse(m) {
+    const kind = m.title === "IN STOCK" ? "in" : m.title === "SOLD OUT" ? "out" : null;
+    if (!kind) return null;
+    const x = /^iPhone Duo (\S+) (.+?) at Apple (.+?)(?: \(([^)]*)\))?$/.exec(m.message || "");
+    if (!x) return null;
+    return { id: m.id, t: m.time, kind, size: x[1], color: x[2], model: x[1] + " " + x[2], store: x[3], place: x[4] || "" };
+  }
+
+  async function poll() {
+    if (!topic) return;
+    const last = events.length ? events[events.length - 1].id : null;
+    const url = `https://ntfy.sh/${encodeURIComponent(topic)}/json?poll=1&since=${last || "12h"}`;
+    try {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(res.status);
+      const text = await res.text();
+      const known = new Set(events.map((e) => e.id));
+      const fresh = text.split("\n").filter(Boolean).map((l) => JSON.parse(l))
+        .filter((m) => m.event === "message" && !known.has(m.id)).map(parse).filter(Boolean);
+      const cutoff = Date.now() / 1000 - KEEP_DAYS * 86400;
+      events = events.concat(fresh).filter((e) => e.t >= cutoff).sort((a, b) => a.t - b.t).slice(-3000);
+      store.set("events:" + topic, events);
+      if (!firstLoad && sound && fresh.some((e) => e.kind === "in" && matches(e))) beep();
+      const flash = firstLoad ? new Set() : new Set(fresh.map((e) => e.id));
+      firstLoad = false;
+      lastOk = Date.now();
+      render(flash);
+    } catch (err) {
+      renderStatus("Couldn't reach the feed; retrying.");
+    }
+  }
+
+  function matches(e) {
+    if (filters.event !== "all" && e.kind !== filters.event) return false;
+    if (filters.where === "mine" && !MY_STORES.includes(e.store)) return false;
+    if (filters.model === "night") return e.color === "Night Sky";
+    if (filters.model === "white") return e.color === "Star White";
+    if (filters.model !== "all") return e.model === filters.model;
+    return true;
+  }
+
+  const fmtTime = (t) => new Date(t * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  function dayLabel(t) {
+    const d = new Date(t * 1000), today = new Date();
+    const diff = Math.round((new Date(today.toDateString()) - new Date(d.toDateString())) / 86400000);
+    if (diff === 0) return "Today";
+    if (diff === 1) return "Yesterday";
+    return d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+  }
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+
+  function renderStatus(problem) {
+    const s = $("status");
+    s.textContent = "";
+    const live = el("span");
+    const dot = el("span", "dot" + (problem || Date.now() - lastOk > 60000 ? " stale" : ""));
+    live.append(dot, document.createTextNode(problem || (lastOk ? `Updated ${fmtTime(lastOk / 1000)} · checks every 15 s` : "Connecting…")));
+    s.append(live, el("span", null, `Feed: ${topic}`));
+  }
+
+  function render(freshIds = new Set()) {
+    renderStatus();
+    document.querySelectorAll(".chip[data-filter]").forEach((c) =>
+      c.setAttribute("aria-pressed", String(filters[c.dataset.filter] === c.dataset.value)));
+
+    // Latest event per store + model; an IN STOCK one means it's in stock now.
+    const latest = new Map();
+    for (const e of events) latest.set(e.store + "|" + e.model, e);
+    const now = [...latest.values()].filter((e) => e.kind === "in" && matches({ ...e, kind: "in" }))
+      .sort((a, b) => b.t - a.t);
+    const nowBox = $("now");
+    nowBox.textContent = "";
+    if (!now.length) nowBox.append(el("div", "empty", "Nothing in stock right now for this filter."));
+    for (const e of now) {
+      const item = el("div", "now-item");
+      const what = el("span");
+      what.append(el("b", null, e.model), document.createTextNode(` at Apple ${e.store}${e.place ? " · " + e.place : ""}`));
+      item.append(what, el("span", "since", "since " + fmtTime(e.t)));
+      nowBox.append(item);
+    }
+
+    const shown = events.filter(matches).reverse();
+    const log = $("log");
+    log.textContent = "";
+    if (!shown.length) log.append(el("div", "empty", events.length
+      ? "No changes match this filter yet."
+      : "No changes yet. Each time any iPhone Duo comes into stock or sells out at an Apple Store, it's listed here."));
+    let day = null;
+    for (const e of shown) {
+      const label = dayLabel(e.t);
+      if (label !== day) { log.append(el("div", "day", label)); day = label; }
+      const row = el("div", "entry" + (freshIds.has(e.id) ? " fresh" : ""));
+      const what = el("div", "what");
+      what.append(el("div", null, e.model), el("div", "where", `Apple ${e.store}${e.place ? " · " + e.place : ""}`));
+      row.append(el("span", "time", fmtTime(e.t)), el("span", "badge " + e.kind, e.kind === "in" ? "IN STOCK" : "SOLD OUT"), what);
+      log.append(row);
+    }
+    $("footnote").textContent = `Showing ${shown.length} of ${events.length} changes saved in this browser (up to ${KEEP_DAYS} days). The feed itself keeps 12 hours, so open this page now and then to keep a longer history.`;
+  }
+
+  function beep() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [0, 0.25, 0.5].forEach((at) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.value = 880; o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.2, ctx.currentTime + at); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + at + 0.2);
+        o.start(ctx.currentTime + at); o.stop(ctx.currentTime + at + 0.2);
+      });
+    } catch {}
+  }
+
+  function start() {
+    $("setup").hidden = !!topic;
+    $("now-section").hidden = $("log-section").hidden = !topic;
+    if (!topic) { renderStatus("Not connected yet."); $("topic-input").focus(); return; }
+    render();
+    poll();
+    clearInterval(timer);
+    timer = setInterval(() => { if (!document.hidden) poll(); else renderStatus(); }, POLL_MS);
+  }
+
+  document.addEventListener("click", (ev) => {
+    const c = ev.target.closest(".chip[data-filter]");
+    if (c) { filters[c.dataset.filter] = c.dataset.value; store.set("filters", filters); render(); }
+  });
+  $("sound").addEventListener("click", () => {
+    sound = !sound;
+    $("sound").setAttribute("aria-pressed", String(sound));
+    if (sound) beep();
+  });
+  $("topic-form").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    topic = $("topic-input").value.trim();
+    store.set("topic", topic);
+    events = store.get("events:" + topic, []);
+    start();
+  });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
+  if (params.get("topic")) store.set("topic", topic);
+  start();
+})();
+</script>
+</body>
+</html>

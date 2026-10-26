@@ -19,16 +19,7 @@ import urllib.error
 import pickup_watch as w
 from pickup_watch import log
 
-PARTS = {
-    "MK1E4LL/A": "256GB Star White",
-    "MK1F4LL/A": "256GB Night Sky",
-    "MK1G4LL/A": "512GB Star White",
-    "MK1H4LL/A": "512GB Night Sky",
-    "MK1J4LL/A": "1TB Star White",
-    "MK1L4LL/A": "1TB Night Sky",
-    "MK1Q4LL/A": "2TB Star White",
-    "MK1R4LL/A": "2TB Night Sky",
-}
+PARTS = w.ALL_MODELS
 
 # Every US Apple Store (269 in Oct 2026) is among the 12 stores Apple lists nearest to one of
 # these; picked from a survey of ~160 ZIPs across the country.
@@ -55,10 +46,14 @@ def main():
     p.add_argument("--pace", type=float, default=8, help="seconds between requests to Apple (plus jitter)")
     p.add_argument("--changes-file", default="us_stock_changes.csv", help="CSV log of changes")
     p.add_argument("--allow-sleep", action="store_true", help="don't keep the Mac awake while tracking")
+    p.add_argument("--skip-store", action="append", default=[], metavar="STORE",
+                   help="leave out a store number another watcher already covers (repeatable)")
+    p.add_argument("--feed-topic", metavar="TOPIC", help="ntfy topic for changes (default <topic>-us)")
     args = p.parse_args()
     if not ZIPS:
         p.error("no ZIPs configured yet; fill in ZIPS")
-    feed = f"{args.topic}-us"
+    feed = args.feed_topic or f"{args.topic}-us"
+    skip = set(args.skip_store)
     parts = list(PARTS)
 
     log(f"tracking {len(parts)} iPhone Duo models at US Apple Stores near {len(ZIPS)} ZIPs; "
@@ -73,7 +68,7 @@ def main():
         for zip_code in ZIPS:
             try:
                 infos = w.fetch(parts, location=zip_code)
-                hits = [h for info in infos if info.get("storeNumber") not in seen
+                hits = [h for info in infos if info.get("storeNumber") not in seen | skip
                         for h in w.store_hits(info, parts, "")]
                 failures = 0
             except (urllib.error.URLError, RuntimeError, KeyError, ValueError) as e:

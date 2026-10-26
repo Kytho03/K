@@ -54,6 +54,20 @@ posts one summary of everywhere with stock. It never sends alerts.
 python3 us_stock_tracker.py --topic <your-ntfy-topic>
 ```
 
+### Restock log page
+
+`docs/index.html` is a "recent changes" page: it reads the `-us` ntfy feed every
+15 seconds and lists each in-stock / sold-out change (newest first, by day),
+with an "In stock now" summary and filters for event, your stores and model. It
+keeps what it sees in the browser for up to 7 days (ntfy only keeps 12 hours).
+Serve it with GitHub Pages (Settings > Pages > Deploy from a branch > `main`,
+`/docs`) and open `https://<user>.github.io/<repo>/?topic=<your-ntfy-topic>-us`.
+
+To feed it, run the watcher with `--changes --feed-all --changes-topic
+<your-ntfy-topic>-us` (every model at your stores, every check) and
+`us_stock_tracker.py` with a `--skip-store` for each of those stores (the rest
+of the US, every ~7 minutes).
+
 ### Auto-checkout to the Review page
 
 With `--checkout`, on stock it opens Chrome and, signed in to your Apple
