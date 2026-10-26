@@ -33,6 +33,8 @@ Add `--status` to post every check result (or failed check) to the ntfy topic
 `<your-ntfy-topic>-status` without a push notification. Subscribe to that topic
 in the ntfy app and open it (pull down to refresh) for a live feed of what the
 watcher sees; only real stock alerts, on your main topic, notify your phone.
+`--status-every 85` posts the latest result every 85 seconds instead of after
+every check, and `--status-title` names the watcher in those posts.
 
 Add `--changes` to keep a log like a "recent changes" list: every time a model
 comes into stock or sells out at a watched store, it's posted to the ntfy topic

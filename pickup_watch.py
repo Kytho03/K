@@ -190,10 +190,10 @@ def repeat_alert(topic, title, message, links, delays):
         threading.Timer(delay, resend, args=(n,)).start()
 
 
-def post_status(topic, text):
+def post_status(topic, text, title="Pickup watcher"):
     """Post a check result to <topic>-status for the ntfy app's feed, without a push notification."""
     try:
-        send_ntfy(f"{topic}-status", "Pickup watcher", text, priority="min", tags="eyes", push=False)
+        send_ntfy(f"{topic}-status", title, text, priority="min", tags="eyes", push=False)
     except (urllib.error.URLError, ValueError) as e:
         log(f"status update failed: {e}")
 
@@ -326,6 +326,11 @@ def main():
     p.add_argument("--status", action="store_true",
                    help="post every check result to the ntfy topic <topic>-status, without push "
                         "notifications (open the topic in the app to see them)")
+    p.add_argument("--status-every", type=float, default=0, metavar="SECONDS",
+                   help="with --status, post the latest result every this many seconds instead of "
+                        "after every check")
+    p.add_argument("--status-title", default="Pickup watcher",
+                   help="title on --status posts, to tell watchers apart")
     p.add_argument("--changes", action="store_true",
                    help="keep watching after alerts, alert again whenever stock newly appears, and log "
                         "every in-stock/sold-out change to <topic>-changes (no push) and --changes-file")
@@ -367,6 +372,23 @@ def main():
         keep_awake()
     failures = 0
     prev = set()  # (store, part)s in stock at the last check, for --changes
+    latest = []  # the most recent check result, for timed --status posts
+
+    def status(text):
+        if not args.status:
+            return
+        if not args.status_every or not latest:  # every check, or the first one right away
+            post_status(args.topic, text, args.status_title)
+        latest[:] = [text]
+
+    def post_latest_on_timer():
+        while True:
+            time.sleep(args.status_every)
+            post_status(args.topic, latest[0], args.status_title)
+
+    if args.status and args.status_every:
+        threading.Thread(target=post_latest_on_timer, daemon=True).start()
+
     while True:
         try:
             every = check(feed_parts, stores, args.zip)  # feed_parts covers parts
@@ -374,8 +396,7 @@ def main():
             extra = check_near(feed_parts, args.near, set(stores)) if args.near else []
             failures = 0
             log(summary(hits))
-            if args.status:
-                post_status(args.topic, summary(hits))
+            status(summary(hits))
             in_stock = [h for h in hits if h.available]
             if args.changes:  # alert only on stock that wasn't there last check
                 in_stock = [h for h in in_stock if (h.store, h.part) not in prev]
@@ -411,8 +432,7 @@ def main():
         except (urllib.error.URLError, RuntimeError, KeyError, ValueError) as e:
             failures += 1
             log(f"check failed ({failures} in a row): {e}")
-            if args.status:
-                post_status(args.topic, f"check failed ({failures} in a row): {e}")
+            status(f"check failed ({failures} in a row): {e}")
 
         # Back off on repeated errors (up to 10 minutes) so an Apple block can clear.
         base = min(args.interval * 2 ** (failures - 1), 600) if failures else args.interval
