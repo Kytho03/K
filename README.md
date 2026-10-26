@@ -64,7 +64,8 @@ Serve it with GitHub Pages (Settings > Pages > Deploy from a branch > `main`,
 `/docs`) and open `https://<user>.github.io/<repo>/?topic=<your-ntfy-topic>-us`.
 
 To feed it, run the watcher with `--changes --feed-all --changes-topic
-<your-ntfy-topic>-us` (every model at your stores, every check) and
+<your-ntfy-topic>-us` (every model at your stores, every check; or name extra
+models with `--feed-part`, e.g. the Star White 256GB/512GB) and
 `us_stock_tracker.py` with a `--skip-store` for each of those stores (the rest
 of the US, every ~7 minutes).
 

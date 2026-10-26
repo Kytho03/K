@@ -334,6 +334,8 @@ def main():
                    help="ntfy topic for --changes (default <topic>-changes)")
     p.add_argument("--feed-all", action="store_true",
                    help="with --changes, log every iPhone Duo size and colour (alerts stay on --part)")
+    p.add_argument("--feed-part", action="append", default=[], metavar="PART",
+                   help="with --changes, also log this model (repeatable; alerts stay on --part)")
     p.add_argument("--near", action="append", default=[], metavar="ZIP",
                    help="with --changes, also track every store Apple lists near this ZIP (repeatable; "
                         "changes feed only, no alerts; one extra request per ZIP per check)")
@@ -345,7 +347,11 @@ def main():
     unknown = [part for part in parts if part not in LINKS]
     if unknown:
         p.error(f"unknown part {', '.join(unknown)}; use one of {', '.join(LINKS)}")
-    feed_parts = parts + [m for m in ALL_MODELS if m not in parts] if args.feed_all else parts
+    extra_parts = list(ALL_MODELS) if args.feed_all else args.feed_part
+    unknown = [part for part in extra_parts if part not in ALL_MODELS]
+    if unknown:
+        p.error(f"unknown --feed-part {', '.join(unknown)}; use one of {', '.join(ALL_MODELS)}")
+    feed_parts = parts + [m for m in extra_parts if m not in parts]
 
     if args.test_notify:
         ok = notify(args.topic, "Test: pickup watcher", "Notifications are working.",
