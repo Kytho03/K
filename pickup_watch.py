@@ -209,11 +209,16 @@ def notify(topic, title, message, links):
     the first is the tap target. Returns True if any channel got through."""
     sent = False
     body = message if links[0][1] in message else f"{message}\n{links[0][1]}"
-    try:
-        send_ntfy(topic, title, message, links)
-        sent = True
-    except (urllib.error.URLError, ValueError) as e:
-        log(f"ntfy alert failed: {e}")
+    for attempt in range(3):
+        try:
+            send_ntfy(topic, title, message, links)
+            sent = True
+            break
+        except (urllib.error.URLError, ValueError) as e:
+            log(f"ntfy alert failed: {e}")
+            if getattr(e, "code", None) != 429:
+                break
+            time.sleep(4)  # ntfy is rate-limiting; its per-second limit frees up in a few seconds
     if IMESSAGE_TO:
         try:
             send_imessage(IMESSAGE_TO, f"{title}\n{body}")
@@ -372,6 +377,7 @@ def main():
         keep_awake()
     failures = 0
     prev = set()  # (store, part)s in stock at the last check, for --changes
+    unalerted = set()  # (store, part)s in stock whose alert didn't get through; retried each check
     latest = []  # the most recent check result, for timed --status posts
 
     def status(text):
@@ -399,7 +405,8 @@ def main():
             status(summary(hits))
             in_stock = [h for h in hits if h.available]
             if args.changes:  # alert only on stock that wasn't there last check
-                in_stock = [h for h in in_stock if (h.store, h.part) not in prev]
+                unalerted &= {(h.store, h.part) for h in in_stock}
+                in_stock = [h for h in in_stock if (h.store, h.part) not in prev or (h.store, h.part) in unalerted]
                 prev = record_changes(args.changes_topic or f"{args.topic}-changes", every + extra, prev,
                                       args.changes_file)
             if in_stock and args.checkout:
@@ -426,9 +433,10 @@ def main():
                     return
                 if alerted:
                     log("alert sent; still watching")
+                    unalerted -= {(h.store, h.part) for h in in_stock}
                 else:
                     log("alert failed; trying again next check")
-                    prev -= {(h.store, h.part) for h in in_stock}
+                    unalerted |= {(h.store, h.part) for h in in_stock}
         except (urllib.error.URLError, RuntimeError, KeyError, ValueError) as e:
             failures += 1
             log(f"check failed ({failures} in a row): {e}")
