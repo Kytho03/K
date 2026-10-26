@@ -3,8 +3,8 @@
 ## Apple pickup watcher
 
 `pickup_watch.py` polls Apple's in-store pickup availability for the iPhone Duo
-Night Sky 256GB (`MK1F4LL/A`) and 512GB (`MK1H4LL/A`) at all 12 Apple Stores in
-the DC/Maryland/Virginia area (see `STORES` in `pickup_watch.py`) every ~2
+Night Sky 256GB (`MK1F4LL/A`) and 512GB (`MK1H4LL/A`) at 9 Apple Stores in DC,
+Maryland and close-in Virginia (see `STORES` in `pickup_watch.py`) every ~2
 minutes with jitter, and sends one ntfy.sh push when either model is available
 at any of them. Use `--store` (repeatable) to watch a different set.
 

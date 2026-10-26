@@ -30,7 +30,7 @@ LINKS = {
     "MK1F4LL/A": "https://www.apple.com/shop/buy-iphone/iphone-duo/7.6-inch-display-256gb-night-sky",
     "MK1H4LL/A": "https://www.apple.com/shop/buy-iphone/iphone-duo/7.6-inch-display-512gb-night-sky",
 }
-# Stores watched by default (every DC/Maryland/Virginia store), in the order auto-checkout
+# Stores watched by default (DC, Maryland and close-in Virginia), in the order auto-checkout
 # prefers them.
 STORES = {
     "R168": "Columbia",  # Columbia Mall, Columbia, MD
@@ -42,9 +42,6 @@ STORES = {
     "R036": "Clarendon",  # Arlington, VA
     "R129": "Pentagon City",  # Arlington, VA
     "R010": "Tysons Corner",  # McLean, VA
-    "R271": "Reston",  # Reston, VA
-    "R221": "Fairfax Corner",  # Fairfax, VA
-    "R598": "Stonebridge Potomac Town Center",  # Woodbridge, VA
 }
 DEFAULT_ZIP = "21044"  # searching near Columbia returns all of these stores
 BAG_URL = "https://www.apple.com/shop/bag"
