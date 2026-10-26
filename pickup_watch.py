@@ -342,6 +342,9 @@ def main():
                    help="keep watching after alerts, alert again whenever stock newly appears, and log "
                         "every in-stock/sold-out change to <topic>-changes (no push) and --changes-file")
     p.add_argument("--changes-file", default="stock_changes.csv", help="CSV log for --changes")
+    p.add_argument("--exit-on-stock", action="store_true",
+                   help="exit with status 3 after new stock is found (and alerted, if possible), so a "
+                        "supervising process can alert another way and restart the watcher")
     p.add_argument("--changes-topic", metavar="TOPIC",
                    help="ntfy topic for --changes (default <topic>-changes)")
     p.add_argument("--feed-all", action="store_true",
@@ -433,6 +436,9 @@ def main():
                 if alerted and not args.changes:
                     log("alert sent; exiting")
                     return
+                if args.exit_on_stock:
+                    log(f"STOCK FOUND: {title} ({'alert sent' if alerted else 'alert failed'}); exiting")
+                    sys.exit(3)
                 if alerted:
                     log("alert sent; still watching")
                     unalerted -= {(h.store, h.part) for h in in_stock}
