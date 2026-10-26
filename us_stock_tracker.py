@@ -4,8 +4,9 @@
 Apple's pickup data only lists the 12 stores nearest a location, so this walks a fixed set of
 ZIP codes chosen so every US store is among the 12 nearest to one of them, one request every
 --pace seconds. Each time any size or colour comes into stock or sells out anywhere, it's logged
-to the ntfy topic <topic>-us (no push; open the topic in the ntfy app) and to us_stock_changes.csv.
-It never sends alerts; pickup_watch.py does that for the stores you'd pick up from.
+to the ntfy topic <topic>-us (no push; open the topic in the ntfy app or docs/index.html) and to
+us_stock_changes.csv; whatever is in stock when it starts is logged as in stock. It never sends
+alerts; pickup_watch.py does that for the stores you'd pick up from.
 
     python3 us_stock_tracker.py --topic my-secret-topic-name
 """
@@ -61,7 +62,6 @@ def main():
     if not args.allow_sleep:
         w.keep_awake()
     prev = set()  # (store, part)s in stock as last seen
-    baseline = True  # the first sweep records what's in stock without posting it as changes
     failures = 0
     while True:
         started, seen, all_hits = time.monotonic(), set(), []
@@ -79,24 +79,12 @@ def main():
             seen.update(info.get("storeNumber") for info in infos)
             all_hits += hits
             batch = {h.store for h in hits}
-            if baseline:
-                prev |= {(h.store, h.part) for h in hits if h.available}
-            else:
-                now = w.record_changes(feed, hits, {k for k in prev if k[0] in batch}, args.changes_file)
-                prev = {k for k in prev if k[0] not in batch} | now
+            now = w.record_changes(feed, hits, {k for k in prev if k[0] in batch}, args.changes_file)
+            prev = {k for k in prev if k[0] not in batch} | now
             time.sleep(args.pace + random.uniform(0, args.pace / 2))
 
-        lines = in_stock_now(all_hits)
-        if baseline:
-            baseline = False
-            text = "\n".join(lines) or "Nothing in stock anywhere right now."
-            try:
-                w.send_ntfy(feed, f"Tracking {len(seen)} US stores: {len(lines)} with stock now",
-                            text[:3900], priority="min", tags="eyes", push=False)
-            except (urllib.error.URLError, ValueError) as e:
-                log(f"changes feed update failed: {e}")
         log(f"sweep done: {len(seen)} stores in {time.monotonic() - started:.0f}s; "
-            f"{len(lines)} with stock")
+            f"{len(in_stock_now(all_hits))} with stock")
 
 
 if __name__ == "__main__":

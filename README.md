@@ -47,8 +47,8 @@ adds a request per check.
 `us_stock_tracker.py` sweeps all 269 US Apple Stores (37 ZIP searches, one
 request every ~8-12 seconds, so a full sweep takes ~7 minutes) for every iPhone
 Duo size and colour, and logs each in-stock / sold-out change to the ntfy topic
-`<your-ntfy-topic>-us` (no push) and `us_stock_changes.csv`. The first sweep
-posts one summary of everywhere with stock. It never sends alerts.
+`<your-ntfy-topic>-us` (no push) and `us_stock_changes.csv`; whatever is in
+stock when it starts is logged as in stock. It never sends alerts.
 
 ```sh
 python3 us_stock_tracker.py --topic <your-ntfy-topic>
