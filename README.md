@@ -12,6 +12,10 @@ On a Mac the watcher keeps the computer awake (via `caffeinate`) for as long as
 it runs, so it can't doze off mid-watch; normal sleep resumes when it stops.
 Keep a MacBook plugged in with the lid open. Pass `--allow-sleep` to opt out.
 
+ntfy.sh allows 250 messages a day per IP address without an account, and a
+shared or cloud IP can run out. Set `NTFY_TOKEN` to an access token from a free
+ntfy.sh account to use that account's own allowance instead.
+
 Check the push arrives, then watch (alerts only):
 
 ```sh

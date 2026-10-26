@@ -156,6 +156,8 @@ end run
 
 def send_ntfy(topic, title, message, links=(), priority="urgent", tags="iphone,rotating_light", push=True):
     headers = {"Title": title, "Priority": priority, "Tags": tags}
+    if os.environ.get("NTFY_TOKEN"):  # an ntfy.sh account's own message allowance, not the IP's
+        headers["Authorization"] = f"Bearer {os.environ['NTFY_TOKEN']}"
     if not push:  # keep it on the topic for the app to fetch, but don't push it to the phone
         headers["Firebase"] = "no"
     if links:
