@@ -342,6 +342,11 @@ def main():
                    help="keep watching after alerts, alert again whenever stock newly appears, and log "
                         "every in-stock/sold-out change to <topic>-changes (no push) and --changes-file")
     p.add_argument("--changes-file", default="stock_changes.csv", help="CSV log for --changes")
+    p.add_argument("--exit-on-alert-failure", action="store_true",
+                   help="exit with status 4 when a stock alert can't be sent on any channel, so a "
+                        "supervising process can alert another way and restart the watcher")
+    p.add_argument("--state-file", metavar="PATH",
+                   help="with --changes, remember what's in stock across restarts in this JSON file")
     p.add_argument("--exit-on-stock", action="store_true",
                    help="exit with status 3 after new stock is found (and alerted, if possible), so a "
                         "supervising process can alert another way and restart the watcher")
@@ -382,6 +387,13 @@ def main():
         keep_awake()
     failures = 0
     prev = set()  # (store, part)s in stock at the last check, for --changes
+    if args.state_file and os.path.exists(args.state_file):
+        try:
+            with open(args.state_file) as f:
+                prev = {tuple(k) for k in json.load(f)}
+            log(f"resuming with {len(prev)} store/model(s) in stock from {args.state_file}")
+        except (OSError, ValueError) as e:
+            log(f"couldn't read {args.state_file}: {e}")
     unalerted = set()  # (store, part)s in stock whose alert didn't get through; retried each check
     latest = []  # the most recent check result, for timed --status posts
 
@@ -414,6 +426,12 @@ def main():
                 in_stock = [h for h in in_stock if (h.store, h.part) not in prev or (h.store, h.part) in unalerted]
                 prev = record_changes(args.changes_topic or f"{args.topic}-changes", every + extra, prev,
                                       args.changes_file)
+                if args.state_file:
+                    try:
+                        with open(args.state_file, "w") as f:
+                            json.dump(sorted(prev), f)
+                    except OSError as e:
+                        log(f"couldn't write {args.state_file}: {e}")
             if in_stock and args.checkout:
                 run_checkout(args, in_stock[0])
                 if not args.changes:
@@ -442,6 +460,9 @@ def main():
                 if alerted:
                     log("alert sent; still watching")
                     unalerted -= {(h.store, h.part) for h in in_stock}
+                elif args.exit_on_alert_failure:
+                    log(f"ALERT NOT SENT: {title} {'; '.join(f'{h.title} at Apple {h.store_name}' for h in in_stock)}; exiting")
+                    sys.exit(4)
                 else:
                     log("alert failed; trying again next check")
                     unalerted |= {(h.store, h.part) for h in in_stock}
