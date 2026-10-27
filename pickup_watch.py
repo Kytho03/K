@@ -211,7 +211,7 @@ def notify(topic, title, message, links):
     the first is the tap target. Returns True if any channel got through."""
     sent = False
     body = message if links[0][1] in message else f"{message}\n{links[0][1]}"
-    for attempt in range(3):
+    for attempt in range(2):
         try:
             send_ntfy(topic, title, message, links)
             sent = True
@@ -231,9 +231,12 @@ def notify(topic, title, message, links):
     return sent
 
 
-def record_changes(feed_topic, hits, prev, path):
+def record_changes(feed_topic, hits, prev, path, deferred=None):
     """Log stock that came in or sold out since the last check, to the console, to the ntfy
-    feed_topic (no push) and to the CSV at path. Returns the (store, part)s now in stock."""
+    feed_topic (no push) and to the CSV at path. Returns the (store, part)s now in stock.
+
+    With a `deferred` list, the ntfy posts are queued there for post_changes() instead, so a
+    stock alert can go out first."""
     now = {(h.store, h.part) for h in hits if h.available}
     for h in hits:
         key = (h.store, h.part)
@@ -245,10 +248,10 @@ def record_changes(feed_topic, hits, prev, path):
             continue
         where = f"Apple {h.store_name}" + (f" ({h.place or h.zip})" if h.place or h.zip else "")
         log(f"{event}: {h.title} at {where}")
-        try:
-            send_ntfy(feed_topic, event, f"{h.title} at {where}", priority="min", tags=tag, push=False)
-        except (urllib.error.URLError, ValueError) as e:
-            log(f"changes feed update failed: {e}")
+        if deferred is not None:
+            deferred.append((feed_topic, event, f"{h.title} at {where}", tag))
+        else:
+            post_changes([(feed_topic, event, f"{h.title} at {where}", tag)])
         try:
             new_file = not os.path.exists(path)
             with open(path, "a", newline="") as f:
@@ -260,6 +263,14 @@ def record_changes(feed_topic, hits, prev, path):
         except OSError as e:
             log(f"couldn't write {path}: {e}")
     return now
+
+
+def post_changes(changes):
+    for feed_topic, event, text, tag in changes:
+        try:
+            send_ntfy(feed_topic, event, text, priority="min", tags=tag, push=False)
+        except (urllib.error.URLError, ValueError) as e:
+            log(f"changes feed update failed: {e}")
 
 
 def keep_awake():
@@ -421,51 +432,55 @@ def main():
             log(summary(hits))
             status(summary(hits))
             in_stock = [h for h in hits if h.available]
+            deferred = []  # change-log posts, sent after any stock alert so the alert goes first
             if args.changes:  # alert only on stock that wasn't there last check
                 unalerted &= {(h.store, h.part) for h in in_stock}
                 in_stock = [h for h in in_stock if (h.store, h.part) not in prev or (h.store, h.part) in unalerted]
                 prev = record_changes(args.changes_topic or f"{args.topic}-changes", every + extra, prev,
-                                      args.changes_file)
+                                      args.changes_file, deferred)
                 if args.state_file:
                     try:
                         with open(args.state_file, "w") as f:
                             json.dump(sorted(prev), f)
                     except OSError as e:
                         log(f"couldn't write {args.state_file}: {e}")
-            if in_stock and args.checkout:
-                run_checkout(args, in_stock[0])
-                if not args.changes:
-                    return
-            elif in_stock:
-                links = {}
-                for h in in_stock:
-                    links.setdefault(h.part, (f"Reserve {h.title}", link_for(h.part)))
-                where = ", ".join(dict.fromkeys(f"Apple {h.store_name}" for h in in_stock))
-                actions = list(links.values())
-                if args.from_bag:  # the phone is set up in the bag: tapping the alert opens it
-                    actions.insert(0, ("Open bag", BAG_URL))
-                title = f"In stock for pickup at {where}!"
-                message = ("\n".join(f"{h.title} at Apple {h.store_name}: {h.quote}" for h in in_stock)
-                           + "\n" + "\n".join(url for _, url in links.values()))
-                alerted = notify(args.topic, title, message, actions)
-                if alerted and (args.repeat or args.bursts > 1):
-                    repeat_alert(args.topic, title, message, actions,
-                                 alert_schedule(args.repeat, args.repeat_every, args.bursts, args.burst_gap))
-                if alerted and not args.changes:
-                    log("alert sent; exiting")
-                    return
-                if args.exit_on_stock:
-                    log(f"STOCK FOUND: {title} ({'alert sent' if alerted else 'alert failed'}); exiting")
-                    sys.exit(3)
-                if alerted:
-                    log("alert sent; still watching")
-                    unalerted -= {(h.store, h.part) for h in in_stock}
-                elif args.exit_on_alert_failure:
-                    log(f"ALERT NOT SENT: {title} {'; '.join(f'{h.title} at Apple {h.store_name}' for h in in_stock)}; exiting")
-                    sys.exit(4)
-                else:
-                    log("alert failed; trying again next check")
-                    unalerted |= {(h.store, h.part) for h in in_stock}
+            try:
+                if in_stock and args.checkout:
+                    run_checkout(args, in_stock[0])
+                    if not args.changes:
+                        return
+                elif in_stock:
+                    links = {}
+                    for h in in_stock:
+                        links.setdefault(h.part, (f"Reserve {h.title}", link_for(h.part)))
+                    where = ", ".join(dict.fromkeys(f"Apple {h.store_name}" for h in in_stock))
+                    actions = list(links.values())
+                    if args.from_bag:  # the phone is set up in the bag: tapping the alert opens it
+                        actions.insert(0, ("Open bag", BAG_URL))
+                    title = f"In stock for pickup at {where}!"
+                    message = ("\n".join(f"{h.title} at Apple {h.store_name}: {h.quote}" for h in in_stock)
+                               + "\n" + "\n".join(url for _, url in links.values()))
+                    alerted = notify(args.topic, title, message, actions)
+                    if alerted and (args.repeat or args.bursts > 1):
+                        repeat_alert(args.topic, title, message, actions,
+                                     alert_schedule(args.repeat, args.repeat_every, args.bursts, args.burst_gap))
+                    if alerted and not args.changes:
+                        log("alert sent; exiting")
+                        return
+                    if args.exit_on_stock:
+                        log(f"STOCK FOUND: {title} ({'alert sent' if alerted else 'alert failed'}); exiting")
+                        sys.exit(3)
+                    if alerted:
+                        log("alert sent; still watching")
+                        unalerted -= {(h.store, h.part) for h in in_stock}
+                    elif args.exit_on_alert_failure:
+                        log(f"ALERT NOT SENT: {title} {'; '.join(f'{h.title} at Apple {h.store_name}' for h in in_stock)}; exiting")
+                        sys.exit(4)
+                    else:
+                        log("alert failed; trying again next check")
+                        unalerted |= {(h.store, h.part) for h in in_stock}
+            finally:
+                post_changes(deferred)
         except (urllib.error.URLError, RuntimeError, KeyError, ValueError) as e:
             failures += 1
             log(f"check failed ({failures} in a row): {e}")
