@@ -317,6 +317,8 @@ def main():
                    % ", ".join(f"{k} {v}" for k, v in STORES.items()))
     p.add_argument("--interval", type=float, default=120, help="base seconds between checks")
     p.add_argument("--jitter", type=float, default=30, help="max +/- seconds of random jitter")
+    p.add_argument("--max-backoff", type=float, default=600, metavar="SECONDS",
+                   help="longest wait between retries after repeated failed checks (default 600)")
     p.add_argument("--test-notify", action="store_true", help="send a test push and exit")
     p.add_argument("--checkout", action="store_true",
                    help="on stock, drive Chrome to the checkout Review page (see checkout.py)")
@@ -486,8 +488,8 @@ def main():
             log(f"check failed ({failures} in a row): {e}")
             status(f"check failed ({failures} in a row): {e}")
 
-        # Back off on repeated errors (up to 10 minutes) so an Apple block can clear.
-        base = min(args.interval * 2 ** (failures - 1), 600) if failures else args.interval
+        # Back off on repeated errors (up to --max-backoff) so an Apple block can clear.
+        base = min(args.interval * 2 ** (failures - 1), args.max_backoff) if failures else args.interval
         time.sleep(max(10, base + random.uniform(-args.jitter, args.jitter)))
 
 
